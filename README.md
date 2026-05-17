@@ -483,16 +483,20 @@ The Partner Portal (`/partner/*`) uses session-based authentication. Log in at `
 
 Rate limits apply across all `/api/v1/*` endpoints on a **sliding 60-second window** (atomic SQL counter, race-condition safe):
 
-| Plan | Rate Limit | Monthly Tokens |
-|---|---|---|
-| Starter | 60 req/min | Included allowance (smaller) |
-| Advanced | 150 req/min | Included allowance (larger) |
-| Enterprise | Custom | Unlimited (per contract) |
-| Legacy partners (pre-billing) | 20 req/min | — |
+| Plan | Monthly Base | Tokens Included | Rate Limit | Overage Rate | Hard Cap |
+|---|---|---|---|---|---|
+| **API Starter** | $499 | 5M tokens | 60 req/min | $25 / 1M | 10M tokens (then 429) |
+| **API Advanced** | $1,999 | 25M tokens | 150 req/min | $18 / 1M | 75M tokens (then 429) |
+| **API Enterprise** | $4,999 | 50M tokens | Custom | $12 / 1M | None (overage billed) |
+| Legacy partners (pre-billing) | — | — | 20 req/min | — | — |
 
 **Over-limit response:** `HTTP 429` with `Retry-After` header.
 
-**Token overage:** $25 / 1M tokens beyond included allowance.
+**Hard cap semantics:** Starter and Advanced plans block at their hard cap (returning 429) until the billing period resets. Enterprise has no hard cap — overage is billed at $12/1M tokens.
+
+**Quota alerts:** All plans receive email/webhook alerts at **80%** and **100%** of the included token allowance, so you're never surprised by overage.
+
+**Token overage** costs are automatically computed and reflected in your monthly invoice. Rates above are per 1M tokens beyond the included allowance.
 
 **Current usage** is returned in every `/api/v1/helix/query` response in the `usage` object and is visible in the Partner Portal under Usage & Billing.
 
@@ -544,9 +548,26 @@ All API errors return a JSON body with a stable `error.code` field that integrat
 
 ## Subscription Tiers
 
-All plans include access to `/query`, `/protocols`, `/status`, `/openapi.json`, `/scribe/generate`, and `/scribe/health`. Higher tiers unlock additional endpoints and volume.
+All plans include access to `/query`, `/protocols`, `/status`, `/openapi.json`, `/scribe/generate`, and `/scribe/health`. Higher tiers unlock additional endpoints, higher volume, and reduced overage rates.
 
-| Feature | Starter | Advanced | Enterprise |
+### Token Budget & Pricing
+
+| | API Starter | API Advanced | API Enterprise |
+|---|---|---|---|
+| **Monthly base** | $499 | $1,999 | $4,999 |
+| **Tokens included / month** | 5,000,000 | 25,000,000 | 50,000,000 |
+| **Overage rate** | $25 / 1M tokens | $18 / 1M tokens | $12 / 1M tokens |
+| **Hard cap** | 10M tokens — then 429 | 75M tokens — then 429 | None (overage billed) |
+| **Quota alerts** | 80% + 100% | 80% + 100% | 80% + 100% |
+| **Rate limit** | 60 req/min | 150 req/min | Custom |
+
+> **Hard cap semantics:** When a Starter or Advanced partner hits their hard cap, the API returns `429 BUDGET_EXCEEDED` for the remainder of the billing period. The counter resets at the start of the next period. Enterprise partners have no hard cap — usage above 50M tokens is billed at the discounted $12/1M rate.
+
+> Token usage is tracked per billing period (scoped to Stripe's `current_period_start` when a subscription is active, or calendar month as a fallback). Current usage is returned in every `/api/v1/helix/query` response in the `usage` object and in the Partner Portal under **Usage & Billing**.
+
+### Feature Access by Tier
+
+| Feature | API Starter | API Advanced | API Enterprise |
 |---|---|---|---|
 | `/api/v1/helix/query` | ✅ | ✅ | ✅ |
 | `/api/v1/helix/protocols/:compound` | ✅ | ✅ | ✅ |
@@ -556,11 +577,9 @@ All plans include access to `/query`, `/protocols`, `/status`, `/openapi.json`, 
 | MCP: `helix_compare` | ❌ | ✅ | ✅ |
 | MCP: `helix_dossier_start` | ❌ | ✅ | ✅ |
 | Seats | Up to 5 | Up to 25 | Unlimited (per contract) |
-| Rate limit | 60 req/min | 150 req/min | Custom |
 | White-label portal | ❌ | ❌ | ✅ |
 | BAA (HIPAA) | ❌ | ❌ | ✅ |
 | Dedicated support | ❌ | ❌ | ✅ |
-| Token overage billing | $25/1M | $25/1M | $25/1M |
 
 Contact [info@hormonaly.ai](mailto:info@hormonaly.ai) or see [hormonaly.ai/pricing](https://hormonaly.ai/pricing) for current plan details.
 
