@@ -23,6 +23,10 @@ This repository is the public-facing integration reference for enterprise partne
 9. [Scribe API](#scribe-api)
 10. [Security & Compliance](#security--compliance)
 11. [Getting Access](#getting-access)
+12. [Three-Lens Scoring](#three-lens-scoring)
+13. [Webhook Events](#webhook-events)
+14. [API Versioning & Stability](#api-versioning--stability)
+15. [About Hormonaly](#about-hormonaly)
 
 ---
 
@@ -366,90 +370,357 @@ Three tools activate the full multi-agent pipeline:
 
 ### MCP Tool Input Schemas
 
-**`helix_query`**
+All 24 tool schemas. The `inputSchema` block is what Claude Desktop and MCP clients use to validate parameters before sending.
 
+#### Helix Tools
+
+**`helix_query`**
 ```json
 {
   "name": "helix_query",
   "inputSchema": {
     "type": "object",
     "properties": {
-      "query":   { "type": "string", "description": "Clinical question" },
-      "mode":    { "type": "string", "enum": ["evidence", "conversational"], "default": "evidence" },
-      "api_key": { "type": "string", "description": "Override env API key per-call" }
+      "question":         { "type": "string", "description": "Clinical question", "maxLength": 10000 },
+      "language":         { "type": "string", "enum": ["en","ar"], "default": "en" },
+      "detail_level":     { "type": "string", "enum": ["clinical","summary"], "default": "clinical" },
+      "include_citations":{ "type": "boolean", "default": true },
+      "include_three_lens":{ "type": "boolean", "default": false },
+      "api_key":          { "type": "string", "description": "Override env API key" }
     },
-    "required": ["query"]
+    "required": ["question"]
   }
 }
 ```
 
-**`protocol_get_interactions`**
-
+**`helix_compare`** *(Professional/Enterprise)*
 ```json
 {
-  "name": "protocol_get_interactions",
+  "name": "helix_compare",
   "inputSchema": {
     "type": "object",
     "properties": {
-      "compounds": {
-        "type": "array",
-        "items": { "type": "string" },
-        "description": "List of compound slugs to screen (e.g. ['bpc-157', 'tb-500', 'semaglutide'])"
-      }
+      "compounds":  { "type": "array", "items": { "type": "string" }, "minItems": 2, "maxItems": 3 },
+      "indication": { "type": "string", "default": "General comparison" },
+      "language":   { "type": "string", "enum": ["en","ar"], "default": "en" },
+      "api_key":    { "type": "string" }
     },
     "required": ["compounds"]
   }
 }
 ```
 
-**`run_clinical_workflow`**
-
+**`helix_protocol`**
 ```json
 {
-  "name": "run_clinical_workflow",
+  "name": "helix_protocol",
   "inputSchema": {
     "type": "object",
     "properties": {
-      "query": { "type": "string", "description": "Complex clinical question for multi-agent synthesis" },
-      "patient_context": {
-        "type": "object",
-        "description": "Optional: age, sex, diagnoses, active_protocols, lab_values",
-        "properties": {
-          "age":              { "type": "number" },
-          "sex":              { "type": "string" },
-          "diagnoses":        { "type": "array", "items": { "type": "string" } },
-          "active_protocols": { "type": "array", "items": { "type": "string" } },
-          "lab_values":       { "type": "object" }
-        }
-      }
-    },
-    "required": ["query"]
-  }
-}
-```
-
-**`helix_deep_analysis`**
-
-```json
-{
-  "name": "helix_deep_analysis",
-  "inputSchema": {
-    "type": "object",
-    "properties": {
-      "compound": { "type": "string", "description": "Compound slug or name" },
-      "lenses": {
-        "type": "array",
-        "items": { "type": "string", "enum": ["longevity", "health_disease", "performance"] },
-        "description": "Which Three-Lens dimensions to score (default: all three)"
-      }
+      "compound":  { "type": "string", "maxLength": 200 },
+      "language":  { "type": "string", "enum": ["en","ar"], "default": "en" },
+      "api_key":   { "type": "string" }
     },
     "required": ["compound"]
   }
 }
 ```
 
----
+**`helix_dossier_start`** *(Professional/Enterprise)*
+```json
+{
+  "name": "helix_dossier_start",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "compound":  { "type": "string", "maxLength": 500 },
+      "language":  { "type": "string", "enum": ["en","ar"], "default": "en" },
+      "api_key":   { "type": "string" }
+    },
+    "required": ["compound"]
+  }
+}
+```
 
+**`helix_dossier_status`**
+```json
+{
+  "name": "helix_dossier_status",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "job_id":  { "type": "string" },
+      "api_key": { "type": "string" }
+    },
+    "required": ["job_id"]
+  }
+}
+```
+
+**`helix_deep_analysis`** *(Enterprise)*
+```json
+{
+  "name": "helix_deep_analysis",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "topic":    { "type": "string", "description": "Clinical topic for deep analysis", "maxLength": 10000 },
+      "language": { "type": "string", "enum": ["en","ar"], "default": "en" },
+      "api_key":  { "type": "string" }
+    },
+    "required": ["topic"]
+  }
+}
+```
+
+#### Agentic Workflow Tools
+
+**`run_clinical_workflow`**
+```json
+{
+  "name": "run_clinical_workflow",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "question":        { "type": "string", "description": "Complex clinical question", "maxLength": 10000 },
+      "patient_context": { "type": "string", "description": "Optional: age, sex, conditions, medications" },
+      "language":        { "type": "string", "enum": ["en","ar"], "default": "en" },
+      "api_key":         { "type": "string" }
+    },
+    "required": ["question"]
+  }
+}
+```
+
+**`monitor_protocol_updates`** *(session auth)*
+```json
+{
+  "name": "monitor_protocol_updates",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "session_token":    { "type": "string" },
+      "compound_filter":  { "type": "array", "items": { "type": "string" }, "description": "Filter to specific compounds" }
+    }
+  }
+}
+```
+
+#### Protocol Tools
+
+**`protocol_search`**
+```json
+{
+  "name": "protocol_search",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "query":    { "type": "string" },
+      "category": { "type": "string", "description": "e.g. 'weight-loss', 'hormones'" },
+      "limit":    { "type": "number", "default": 10 }
+    },
+    "required": ["query"]
+  }
+}
+```
+
+**`protocol_get`**
+```json
+{
+  "name": "protocol_get",
+  "inputSchema": {
+    "type": "object",
+    "properties": { "id": { "type": "string" } },
+    "required": ["id"]
+  }
+}
+```
+
+**`protocol_list_categories`**
+```json
+{
+  "name": "protocol_list_categories",
+  "inputSchema": { "type": "object", "properties": {} }
+}
+```
+
+**`protocol_get_interactions`**
+```json
+{
+  "name": "protocol_get_interactions",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "compounds": { "type": "array", "items": { "type": "string" }, "minItems": 2,
+                    "description": "Compound slugs to screen" }
+    },
+    "required": ["compounds"]
+  }
+}
+```
+
+#### Evidence Tools
+
+**`evidence_search`**
+```json
+{
+  "name": "evidence_search",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "compound":    { "type": "string" },
+      "max_results": { "type": "number", "default": 10 }
+    },
+    "required": ["compound"]
+  }
+}
+```
+
+**`evidence_get`**
+```json
+{
+  "name": "evidence_get",
+  "inputSchema": {
+    "type": "object",
+    "properties": { "id": { "type": "string" } },
+    "required": ["id"]
+  }
+}
+```
+
+**`evidence_grade`**
+```json
+{
+  "name": "evidence_grade",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "ids": { "type": "array", "items": { "type": "string" }, "minItems": 1, "maxItems": 20,
+               "description": "Evidence record IDs to GRADE-score" }
+    },
+    "required": ["ids"]
+  }
+}
+```
+
+#### Compound Tools
+
+**`compound_search`**
+```json
+{
+  "name": "compound_search",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "query":    { "type": "string" },
+      "category": { "type": "string" }
+    },
+    "required": ["query"]
+  }
+}
+```
+
+**`compound_get_interactions`**
+```json
+{
+  "name": "compound_get_interactions",
+  "inputSchema": {
+    "type": "object",
+    "properties": { "slug": { "type": "string", "description": "e.g. 'semaglutide'" } },
+    "required": ["slug"]
+  }
+}
+```
+
+**`compound_get_dosing`**
+```json
+{
+  "name": "compound_get_dosing",
+  "inputSchema": {
+    "type": "object",
+    "properties": { "slug": { "type": "string", "description": "e.g. 'testosterone-cypionate'" } },
+    "required": ["slug"]
+  }
+}
+```
+
+#### User Tools *(session auth required)*
+
+**`user_get_profile`**
+```json
+{
+  "name": "user_get_profile",
+  "inputSchema": {
+    "type": "object",
+    "properties": { "session_token": { "type": "string" } }
+  }
+}
+```
+
+**`user_get_usage`**
+```json
+{
+  "name": "user_get_usage",
+  "inputSchema": {
+    "type": "object",
+    "properties": { "session_token": { "type": "string" } }
+  }
+}
+```
+
+**`user_get_saved_protocols`**
+```json
+{
+  "name": "user_get_saved_protocols",
+  "inputSchema": {
+    "type": "object",
+    "properties": { "session_token": { "type": "string" } }
+  }
+}
+```
+
+#### Admin Tools *(admin session required)*
+
+**`admin_get_stats`**
+```json
+{
+  "name": "admin_get_stats",
+  "inputSchema": {
+    "type": "object",
+    "properties": { "admin_session_token": { "type": "string" } }
+  }
+}
+```
+
+**`admin_list_users`**
+```json
+{
+  "name": "admin_list_users",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "limit":               { "type": "number", "default": 20 },
+      "offset":              { "type": "number", "default": 0 },
+      "search":              { "type": "string" },
+      "admin_session_token": { "type": "string" }
+    }
+  }
+}
+```
+
+**`admin_get_ai_costs`**
+```json
+{
+  "name": "admin_get_ai_costs",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "days":                { "type": "number", "default": 30 },
+      "admin_session_token": { "type": "string" }
+    }
+  }
+}
+```
 ## Authentication
 
 Hormonaly uses **two independent auth systems** — do not mix them:
@@ -494,6 +765,8 @@ Rate limits apply across all `/api/v1/*` endpoints on a **sliding 60-second wind
 
 **Over-limit response:** `HTTP 429` with `Retry-After` header.
 
+**Burst behavior:** The rate limiter uses a sliding 60-second window (atomic SQL counter, cross-instance safe). There is **no burst allowance** — the counter is evaluated on every request, and once the per-minute ceiling is reached the next request immediately returns 429. Honor the `Retry-After` value before retrying.
+
 **Hard cap semantics:** Starter and Advanced plans block at their hard cap (returning 429) until the billing period resets. Enterprise has no hard cap — overage is billed at $12/1M tokens.
 
 **Quota alerts:** All plans receive email/webhook alerts at **80%** and **100%** of the included token allowance, so you're never surprised by overage.
@@ -503,6 +776,34 @@ Rate limits apply across all `/api/v1/*` endpoints on a **sliding 60-second wind
 **Current usage** is returned in every `/api/v1/helix/query` response in the `usage` object and is visible in the Partner Portal under Usage & Billing.
 
 **Budget enforcement:** Per-plan monthly token budgets are enforced before every call. Calls that would exceed the monthly token allowance or trigger the hard cap are blocked with `429` before any LLM tokens are consumed.
+
+### `usage` Object
+
+Every `POST /api/v1/helix/query` response includes a top-level `usage` object reflecting your real-time token consumption:
+
+```json
+{
+  "usage": {
+    "tokensUsedThisMonth": 1234567,
+    "monthlyTokenBudget": 5000000,
+    "percentUsed": 24.7,
+    "hardCapTokens": 10000000,
+    "hardCapExceeded": false,
+    "quotaThresholdsCrossed": [80]
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `tokensUsedThisMonth` | number | Cumulative tokens consumed in the current billing period |
+| `monthlyTokenBudget` | number | Included token allowance for your plan |
+| `percentUsed` | number | Percentage of included allowance consumed |
+| `hardCapTokens` | number \| null | Hard cap in tokens; `null` = Enterprise (no cap) |
+| `hardCapExceeded` | boolean | `true` when the partner has hit or exceeded their hard cap this period |
+| `quotaThresholdsCrossed` | number[] | Quota alert thresholds crossed this period (e.g. `[80]` = 80% alert fired) |
+
+> **Billing period scoping:** When a Stripe subscription is active, `tokensUsedThisMonth` is scoped to Stripe's `current_period_start`. For partners without an active subscription the counter falls back to the calendar month.
 
 ### Response Latency
 
@@ -612,6 +913,8 @@ Generate a structured clinical note from protocol selections and patient context
 ```
 
 **Supported `note_format` values:** `soap` | `dap` | `narrative` (default: `soap`)
+
+> **Rx & Pamphlet outputs:** Prescription (Rx) generation and patient-facing pamphlets are produced via `POST /api/v1/helix/query` with appropriate clinical context — they are not separate `note_format` values on `/scribe/generate`.
 
 **Response (~15–45 seconds):**
 
@@ -740,6 +1043,207 @@ Feed into `openapi-generator`, Prism, or Postman for auto-generated client libra
 | About / Leadership | [hormonaly.ai/about](https://hormonaly.ai/about) |
 | Status | [status.hormonaly.ai](https://status.hormonaly.ai) |
 
+
+---
+
+## Three-Lens Scoring
+
+Three-Lens is Hormonaly's proprietary multi-domain evidence scoring framework. It evaluates a compound independently through three clinical lenses, producing per-lens efficacy and safety scores, an evidence level (A–E), and a synthesized overall recommendation.
+
+### Lenses
+
+| Lens | Domain Label | Focus | Key Endpoints |
+|---|---|---|---|
+| `longevity` | Longevity & Anti-Ageing | Slow or reverse biological ageing to extend healthspan and lifespan | Epigenetic clock deceleration, telomere dynamics, senescent cell clearance, NAD+ levels, mitochondrial function, autophagy markers |
+| `health_disease` | Health & Disease Prevention | Detect, prevent, or reverse chronic disease | CVD risk reduction, HbA1c, inflammatory markers (CRP, IL-6), blood pressure, lipid profile, insulin sensitivity |
+| `performance` | Performance Optimization | Elevate cognitive, metabolic, and physical function above baseline | VO2max, grip strength, cognitive processing speed, sleep quality, body composition, HRV, exercise recovery |
+
+### Score Structure
+
+Each lens returns a `DomainScore` object:
+
+```json
+{
+  "domain": "longevity",
+  "domainLabel": "Longevity & Anti-Ageing",
+  "efficacyScore": 7.4,
+  "safetyScore": 8.1,
+  "evidenceLevel": "C",
+  "evidenceLevelLabel": "Low",
+  "studyCount": 12,
+  "bestStudyType": "Randomized Controlled Trial",
+  "keyFindings": [
+    "Demonstrated mTOR inhibition in human pilot (n=24)",
+    "Improved fasting insulin sensitivity over 12 weeks"
+  ],
+  "limitations": [
+    "Most trials are short-duration (<12 weeks)",
+    "Dose-response relationship in humans not fully established"
+  ],
+  "relevantEndpoints": ["HbA1c", "fasting insulin", "body weight", "adiponectin"]
+}
+```
+
+The top-level response wraps all three lenses plus an overall recommendation:
+
+```json
+{
+  "longevity":     { ... },
+  "healthDisease": { ... },
+  "performance":   { ... },
+  "overallRecommendation": "CONSIDER",
+  "rationale": "Emerging human evidence supports metabolic benefits; longevity-specific endpoints remain preclinical."
+}
+```
+
+### Evidence Levels (5-tier, not 4-tier GRADE)
+
+| Level | Label | Description |
+|---|---|---|
+| A | High | Multiple consistent RCTs or meta-analyses |
+| B | Moderate | At least one RCT or multiple cohort studies |
+| C | Low | Case series, observational studies |
+| D | Very Low | Expert opinion / anecdotal |
+| E | Preclinical | Animal or in vitro studies only |
+
+### Overall Recommendations
+
+| Verdict | Meaning |
+|---|---|
+| `ADOPT` | Strong, consistent human evidence supports use |
+| `CONSIDER` | Reasonable evidence — use with informed consent and monitoring |
+| `WATCH_AND_WAIT` | Promising signals but insufficient evidence for routine use |
+| `AVOID` | Evidence against use or unacceptable safety risk |
+| `INSUFFICIENT_DATA` | Too little data to score meaningfully |
+
+### Requesting Three-Lens Scores
+
+Three-Lens is returned in `helix_query` when `include_three_lens: true`, and always in `helix_deep_analysis` and `run_clinical_workflow`:
+
+```bash
+curl -X POST https://hormonaly.ai/api/v1/helix/query \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What is the evidence for rapamycin in longevity?", "include_three_lens": true}'
+```
+
+Scores are cached for 24 hours per compound/domain combination and persisted to the platform database for trend analysis.
+
+---
+
+## Webhook Events
+
+Hormonaly delivers async job results (dossiers, batch operations) to partner-configured webhook URLs. Webhooks are configured in the Partner Portal under **Settings → Webhooks**.
+
+### Event Types
+
+| Event | Trigger | Payload Fields |
+|---|---|---|
+| `job.completed` | Async job (dossier, batch) finishes successfully | `job_id`, `type`, `status: "completed"`, `result`, `completed_at` |
+| `job.failed` | Async job fails after all retries | `job_id`, `type`, `status: "failed"`, `error`, `completed_at` |
+
+### Payload Shape
+
+```json
+{
+  "event": "job.completed",
+  "job_id": "dossier_abc123",
+  "type": "dossier",
+  "status": "completed",
+  "result": { ... },
+  "error": null,
+  "completed_at": "2026-05-17T14:32:01.000Z"
+}
+```
+
+### Signature Verification
+
+Every delivery is signed with HMAC-SHA256 using your webhook secret. The signature is sent in the `X-Hormonaly-Signature` header:
+
+```
+X-Hormonaly-Signature: sha256=<hex_digest>
+```
+
+To verify in Node.js:
+
+```js
+const crypto = require('crypto');
+
+function verifyWebhook(secret, rawBody, receivedSig) {
+  const expected = 'sha256=' + crypto
+    .createHmac('sha256', secret)
+    .update(rawBody, 'utf8')
+    .digest('hex');
+  return crypto.timingSafeEqual(
+    Buffer.from(expected),
+    Buffer.from(receivedSig)
+  );
+}
+```
+
+> **Security:** Webhook URLs must use HTTPS. Private/reserved IP addresses (RFC-1918, loopback, link-local) are rejected server-side (SSRF prevention).
+
+### Delivery Policy
+
+- **Retries:** 3 attempts maximum with exponential back-off: 1 s → 8 s → 64 s
+- **Timeout:** 10 seconds per delivery attempt
+- **Success:** Any HTTP 2xx response is considered delivered
+- **All attempts logged** in Partner Portal under **Webhooks → Delivery Log**
+
+### Configuring Webhooks
+
+1. Partner Portal → **Settings → Webhooks → Add Endpoint**
+2. Enter your HTTPS endpoint URL
+3. Copy the generated webhook secret — shown once; store immediately
+4. Optionally filter to specific event types
+
+---
+
+## API Versioning & Stability
+
+### Current Version
+
+All endpoints documented here are under `/api/v1/`. The version prefix is present in every path (e.g. `POST /api/v1/helix/query`).
+
+### Stability Tiers
+
+| Tier | Indicator | Commitment |
+|---|---|---|
+| **Stable** | No label | Breaking changes announced ≥ 90 days in advance; old version supported for ≥ 6 months after deprecation notice |
+| **Beta** | `(beta)` in docs | Interface may change; best-effort stability; feedback welcome |
+| **Deprecated** | `(deprecated)` in docs | Scheduled for removal; migration path documented |
+
+### Deprecation Policy
+
+When an endpoint or field is deprecated:
+1. A `Deprecation` header is added to all responses from that endpoint with the sunset date
+2. A `Sunset` header is added when the removal date is within 30 days
+3. Partners on the affected plan receive an email notification
+4. The endpoint continues to function until the sunset date
+
+### Breaking vs. Non-Breaking Changes
+
+**Non-breaking (no notice required):**
+- Adding new optional request fields
+- Adding new response fields
+- Adding new error codes
+- Adding new endpoints
+
+**Breaking (≥ 90-day notice):**
+- Removing or renaming request/response fields
+- Changing field types or enum values
+- Changing authentication requirements
+- Removing endpoints
+
+### Changelog
+
+| Date | Change |
+|---|---|
+| May 2026 | Background agents count updated to ×6 (added user-monitor notifications task) |
+| May 2026 | Model routing updated: TIER_1/TIER_2 use Claude Sonnet 4.6 primary with GPT-4o fallback; TIER_3 uses Claude Haiku 4.5 primary with GPT-4o Mini fallback |
+| May 2026 | Tiered token budgets, hard caps, and overage rates documented (sourced from `shared/plan-pricing.ts`) |
+| May 2026 | Full MCP tool schemas (all 24 tools) published |
+| May 2026 | Three-Lens Scoring, Webhook Events, API Versioning sections added |
 ---
 
 ## About Hormonaly
