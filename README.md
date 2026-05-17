@@ -76,9 +76,9 @@ NeMo Guardrails (PII redaction · off-topic filter)
     ▼
 Agent Router (intent classification → tier selection)
     │
-    ├── TIER_1_BEST:     Claude Sonnet 4.6  (complex/clinical queries)
-    ├── TIER_2_BALANCED: Claude Sonnet 4.6  (Scribe, CDS, Rx)
-    └── TIER_3_FAST:     Claude Haiku 4.5   (free tier, Three-Lens scoring)
+    ├── TIER_1_BEST:     Claude Sonnet 4.6 → GPT-4o fallback  (complex/clinical queries)
+    ├── TIER_2_BALANCED: Claude Sonnet 4.6 → GPT-4o fallback  (Scribe, CDS, Rx)
+    └── TIER_3_FAST:     Claude Haiku 4.5 → GPT-4o Mini fallback  (free tier, Three-Lens scoring)
     │
     ▼
 Multi-Database RAG Retrieval (6 databases · 80K token cap)
@@ -115,7 +115,7 @@ Streaming SSE response → client
 | Contradiction Agent | Primary | Surfaces disagreeing studies, reconciles evidence position |
 | Clinical Decision Agent | Primary | Synthesizes structured clinical recommendation |
 | Quality Gate | Primary | 13 automated checks on every response |
-| Background Agents (×5) | Autonomous | Evidence refresh, safety monitoring, knowledge enrichment, protocol audit, stale-check — run continuously |
+| Background Agents (×6) | Autonomous | Evidence refresh, safety monitoring, knowledge enrichment, protocol audit, stale-check, user-monitor notifications — run continuously |
 
 ### Model Routing
 
@@ -129,6 +129,8 @@ Streaming SSE response → client
 | Multi-agent supervisor/worker | Claude Sonnet 4.6 | 4,000 | SSE + `orchestration_steps[]` |
 | Scribe / Rx / Pamphlet | Claude Sonnet 4.6 | 400–4,096 | Structured template (SOAP / DAP / Narrative / Rx) |
 | Free-tier (all types) | Claude Haiku 4.5 | Same | Same format; shorter context, reduced RAG chunks |
+
+> **Model routing note:** All tiers use a primary + fallback chain. TIER_1/TIER_2 primary is Claude Sonnet 4.6 with GPT-4o as fallback; TIER_3 primary is Claude Haiku 4.5 with GPT-4o Mini fallback. Gemini 2.5 Flash is available as a TIER_3 tertiary fallback.
 
 ### Evidence Quality Pipeline
 
@@ -500,7 +502,7 @@ Rate limits apply across all `/api/v1/*` endpoints on a **sliding 60-second wind
 
 **Current usage** is returned in every `/api/v1/helix/query` response in the `usage` object and is visible in the Partner Portal under Usage & Billing.
 
-**Budget enforcement:** A global $50/day AI spend cap is checked before every call. Calls that would exceed the cap or monthly budget are blocked with `429` before any LLM tokens are consumed.
+**Budget enforcement:** Per-plan monthly token budgets are enforced before every call. Calls that would exceed the monthly token allowance or trigger the hard cap are blocked with `429` before any LLM tokens are consumed.
 
 ### Response Latency
 
@@ -673,7 +675,7 @@ No authentication required.
 
 ### AI Safety
 
-- **NeMo Guardrails** on every query: input PII redaction + off-topic safety filter; output dosing safety scan with inline ⚠️ warnings.
+- **NVIDIA NeMo safety layer** on every query: input PII redaction + off-topic/harm-framing filter (NVIDIA nemotron-mini-4b-instruct); output dosing safety scan with inline ⚠️ warnings (additive only — never blocks a response, only appends caution flags).
 - **PEPTIDE_SAFETY_FOOTER** and **HELIX_REGULATORY_RULES** active on all responses.
 - **No model training on user data** — query data is not used to train or fine-tune any model.
 
