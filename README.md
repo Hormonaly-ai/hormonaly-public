@@ -6,7 +6,7 @@
 [![OpenAPI](https://img.shields.io/badge/OpenAPI-spec-blue)](https://hormonaly.ai/api/v1/helix/openapi.json)
 [![MCP Server](https://img.shields.io/badge/MCP-24%20tools-purple)](#mcp-server--tool-schema)
 
-This repository is the public-facing integration reference for enterprise partners and API integrators. No source code is published here. For clinical access, visit [hormonaly.ai](https://hormonaly.ai).
+This repository is the public-facing integration reference for enterprise partners and API integrators. The MCP server source is published at [Hormonaly-ai/hormonaly-platform](https://github.com/Hormonaly-ai/hormonaly-platform/tree/main/mcp/hormonaly-mcp-server). For clinical access, visit [hormonaly.ai](https://hormonaly.ai).
 
 ---
 
@@ -271,7 +271,15 @@ The Hormonaly MCP server exposes 24 tools that allow Claude Desktop, Cursor, or 
 
 ### Installation (Claude Desktop)
 
-The MCP server build artifact is distributed to enterprise partners on request. Once you have the package installed locally, configure Claude Desktop as follows:
+The MCP server source is available in our [GitHub repository](https://github.com/Hormonaly-ai/hormonaly-platform/tree/main/mcp/hormonaly-mcp-server). Clone and build locally:
+
+```bash
+git clone https://github.com/Hormonaly-ai/hormonaly-platform.git
+cd hormonaly-platform/mcp/hormonaly-mcp-server
+npm install && npm run build
+```
+
+Then configure Claude Desktop as follows:
 
 ```jsonc
 // ~/Library/Application Support/Claude/claude_desktop_config.json
@@ -300,7 +308,7 @@ HTTP_PORT=3100 node dist/index.js
 # Health: GET  http://localhost:3100/health
 ```
 
-To request the MCP package, contact [info@hormonaly.ai](mailto:info@hormonaly.ai).
+See the [mcp/README.md](https://github.com/Hormonaly-ai/hormonaly-platform/blob/main/mcp/README.md) for full setup instructions.
 
 ### Full Tool Schema
 
@@ -320,26 +328,26 @@ To request the MCP package, contact [info@hormonaly.ai](mailto:info@hormonaly.ai
 
 | Tool | Description | Auth |
 |---|---|---|
-| `protocol_search` | Search protocol library by compound, category, or condition | API key |
-| `protocol_get` | Get full protocol details by ID or slug | API key |
-| `protocol_list_categories` | List all 31+ protocol categories with counts | API key |
-| `protocol_get_interactions` | Check interactions between a set of compounds | API key |
+| `protocol_search` | Search protocol library by compound, category, or condition | Public (no auth) |
+| `protocol_get` | Get full protocol details by ID or slug | Public (no auth) |
+| `protocol_list_categories` | List all 31+ protocol categories with counts | Public (no auth) |
+| `protocol_get_interactions` | Check interactions between a set of compounds | Public (no auth) |
 
 #### Evidence Tools
 
 | Tool | Description | Auth |
 |---|---|---|
-| `evidence_search` | Search PubMed for research on a compound or condition | API key |
-| `evidence_get` | Get full evidence record by ID | API key |
-| `evidence_grade` | Grade a set of PMID references using GRADE framework — returns A/B/C/D per study with rationale | API key |
+| `evidence_search` | Search PubMed for research on a compound or condition | Public (no auth) |
+| `evidence_get` | Get full evidence record by ID | Public (no auth) |
+| `evidence_grade` | Grade a set of PMID references using GRADE framework — returns A/B/C/D per study with rationale | Public (no auth) |
 
 #### Compound Tools
 
 | Tool | Description | Auth |
 |---|---|---|
-| `compound_search` | Search the compound database by name or category | API key |
-| `compound_get_interactions` | Get all known interactions for a compound slug | API key |
-| `compound_get_dosing` | Get evidence-based dosing ranges, routes, and cycle guidance | API key |
+| `compound_search` | Search the compound database by name or category | Public (no auth) |
+| `compound_get_interactions` | Get all known interactions for a compound slug | Public (no auth) |
+| `compound_get_dosing` | Get evidence-based dosing ranges, routes, and cycle guidance | Public (no auth) |
 
 #### User Tools *(session auth required)*
 
