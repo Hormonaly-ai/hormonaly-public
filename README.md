@@ -310,6 +310,39 @@ HTTP_PORT=3100 node dist/index.js
 
 See the [mcp/README.md](https://github.com/Hormonaly-ai/hormonaly-platform/blob/main/mcp/README.md) for full setup instructions.
 
+### Remote MCP — Claude.ai One-Click Connect
+
+> **Live** · Published May 2026 · Registry: [registry.modelcontextprotocol.io](https://registry.modelcontextprotocol.io)
+
+The Hormonaly MCP server is deployed as a **remote HTTP/SSE server** and listed on the official [MCP Registry](https://registry.modelcontextprotocol.io) as `io.github.Hormonaly-ai/hormonaly`. Enterprise customers using Claude.ai get a **one-click Connect** experience — no local installation, no Docker, no `claude_desktop_config.json` edits required.
+
+#### Endpoints
+
+| Property | Value |
+|---|---|
+| SSE endpoint | `https://mcp.hormonaly.ai/sse` |
+| Registry ID | `io.github.Hormonaly-ai/hormonaly` |
+| Auth header | `x-api-key: hk_live_...` (Partner API key) |
+| Infrastructure | GCP Cloud Run · Cloudflare DNS · TLS provisioned by GCP |
+
+#### One-Click Connect Flow (Claude.ai Enterprise)
+
+1. Claude.ai discovers Hormonaly via the MCP Registry — no manual URL entry needed
+2. User clicks **Connect** — Claude prompts: *"Enter your x-api-key"*
+3. User pastes their `hk_live_...` Partner API key (from [Partner Portal → API Keys](https://hormonaly.ai/partner/api))
+4. All 24 tools activate immediately in the conversation
+
+#### Authentication & Access Tiers
+
+| Tool group | Auth required | Examples |
+|---|---|---|
+| Protocol, Evidence, Compound tools (10 tools) | **None** — public read access | `protocol_search`, `evidence_search`, `compound_get_dosing` |
+| Helix & agentic tools (14 tools) | API key required | `helix_query`, `run_clinical_workflow`, `helix_deep_analysis` |
+| User tools (4 tools) | Session token | `user_get_profile`, `monitor_protocol_updates` |
+| Admin tools (3 tools) | Admin session | `admin_get_stats`, `admin_list_users` |
+
+Partner API keys start with `hk_live_` and are issued from the Partner Portal. The key is passed as the `x-api-key` SSE header — Claude.ai will prompt for it on first connect.
+
 ### Full Tool Schema
 
 #### Helix Tools
