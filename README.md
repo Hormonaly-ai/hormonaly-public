@@ -800,15 +800,15 @@ Rate limits apply across all `/api/v1/*` endpoints on a **sliding 60-second wind
 | Plan | Monthly Base | Tokens Included | Rate Limit | Overage Rate | Hard Cap |
 |---|---|---|---|---|---|
 | **API Starter** | $499 | 5M tokens | 60 req/min | $25 / 1M | 10M tokens (then 429) |
-| **API Advanced** | $1,999 | 25M tokens | 150 req/min | $18 / 1M | 75M tokens (then 429) |
-| **API Enterprise** | $4,999 | 50M tokens | Custom | $12 / 1M | None (overage billed) |
+| **API Advanced** | $1,999 | 25M tokens | 150 req/min | $25 / 1M | 75M tokens (then 429) |
+| **API Enterprise** | $4,999 | 50M tokens | Custom | $25 / 1M | None (overage billed) |
 | Legacy partners (pre-billing) | — | — | 20 req/min | — | — |
 
 **Over-limit response:** `HTTP 429` with `Retry-After` header.
 
 **Burst behavior:** The rate limiter uses a sliding 60-second window (atomic SQL counter, cross-instance safe). There is **no burst allowance** — the counter is evaluated on every request, and once the per-minute ceiling is reached the next request immediately returns 429. Honor the `Retry-After` value before retrying.
 
-**Hard cap semantics:** Starter and Advanced plans block at their hard cap (returning 429) until the billing period resets. Enterprise has no hard cap — overage is billed at $12/1M tokens.
+**Hard cap semantics:** Starter and Advanced plans block at their hard cap (returning 429) until the billing period resets. Enterprise has no hard cap — overage is billed at $25/1M tokens.
 
 **Quota alerts:** All plans receive email/webhook alerts at **80%** and **100%** of the included token allowance, so you're never surprised by overage.
 
@@ -900,12 +900,12 @@ All plans include access to `/query`, `/protocols`, `/status`, `/openapi.json`, 
 |---|---|---|---|
 | **Monthly base** | $499 | $1,999 | $4,999 |
 | **Tokens included / month** | 5,000,000 | 25,000,000 | 50,000,000 |
-| **Overage rate** | $25 / 1M tokens | $18 / 1M tokens | $12 / 1M tokens |
+| **Overage rate** | $25 / 1M tokens | $25 / 1M tokens | $25 / 1M tokens |
 | **Hard cap** | 10M tokens — then 429 | 75M tokens — then 429 | None (overage billed) |
 | **Quota alerts** | 80% + 100% | 80% + 100% | 80% + 100% |
 | **Rate limit** | 60 req/min | 150 req/min | Custom |
 
-> **Hard cap semantics:** When a Starter or Advanced partner hits their hard cap, the API returns `429 BUDGET_EXCEEDED` for the remainder of the billing period. The counter resets at the start of the next period. Enterprise partners have no hard cap — usage above 50M tokens is billed at the discounted $12/1M rate.
+> **Hard cap semantics:** When a Starter or Advanced partner hits their hard cap, the API returns `429 BUDGET_EXCEEDED` for the remainder of the billing period. The counter resets at the start of the next period. Enterprise partners have no hard cap — usage above 50M tokens is billed at $25/1M.
 
 > Token usage is tracked per billing period (scoped to Stripe's `current_period_start` when a subscription is active, or calendar month as a fallback). Current usage is returned in every `/api/v1/helix/query` response in the `usage` object and in the Partner Portal under **Usage & Billing**.
 
