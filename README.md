@@ -44,7 +44,7 @@ Hormonaly combines three pillars into one platform:
 |---|---|
 | Protocols | 594+ across 31 clinical categories |
 | Studies indexed | 10,000+ |
-| AI agents | 40+ specialist + background agents |
+| AI agents | 42 specialist + background agents |
 | Design partner clinics | 18 |
 | Clinicians trained | 1,000+ |
 | Countries | 5 |
@@ -65,7 +65,7 @@ Hormonaly combines three pillars into one platform:
 
 ## Architecture Overview
 
-Hormonaly is built on a **42-agent orchestration architecture** organized into six categories: Evidence, Research, Clinical, Content, Copilot, and Extraction — plus five continuously-running background agents.
+Hormonaly is built on a **42-agent orchestration architecture** organized into six categories: Evidence, Research, Clinical, Content, Copilot, and Extraction — plus six continuously-running background agents.
 
 ### Query Pipeline
 
@@ -103,7 +103,7 @@ Quality Gate (13 checks · 70% composite threshold · async)
 Citation Grounding (PMID verification · 4s timeout per citation)
     │
     ▼
-NeMo Output Guardrail (dosing safety scan · ⚠️ inline flags)
+NeMo Output Guardrail (dosing safety scan · inline flags)
     │
     ▼
 Streaming SSE response → client
@@ -192,7 +192,7 @@ data: {"type":"done"}
 | `citations` | `number` | Verified PubMed citations included in response |
 | `sources_consulted` | `number` | RAG chunks retrieved from evidence database |
 | `agent_type` | `string` | Which specialist agent handled the query |
-| `verdict` | `"ADOPT"` \| `"CONSIDER"` \| `"WATCH_AND_WAIT"` \| `"AVOID"` \| `"INSUFFICIENT_DATA"` | Three-Lens clinical verdict |
+| `verdict` | `"ADOPT"` \| `"CONSIDER"` \| `"WATCH_AND_WAIT"` \| `"AVOID"` \| `"INSUFFICIENT_DATA"` | Overall clinical verdict (Three-Lens recommendation) |
 | `usage` | `object` | Current token usage toward monthly budget |
 
 ---
@@ -337,7 +337,7 @@ The Hormonaly MCP server is deployed as a **remote HTTP/SSE server** and listed 
 | Tool group | Auth required | Examples |
 |---|---|---|
 | Protocol, Evidence, Compound tools (10 tools) | **None** — public read access | `protocol_search`, `evidence_search`, `compound_get_dosing` |
-| Helix & agentic tools (14 tools) | API key required | `helix_query`, `run_clinical_workflow`, `helix_deep_analysis` |
+| Helix & agentic tools (7 tools) | API key required | `helix_query`, `run_clinical_workflow`, `helix_deep_analysis` |
 | User tools (4 tools) | Session token | `user_get_profile`, `monitor_protocol_updates` |
 | Admin tools (3 tools) | Admin session | `admin_get_stats`, `admin_list_users` |
 
@@ -434,14 +434,14 @@ All 24 tool schemas. The `inputSchema` block is what Claude Desktop and MCP clie
 }
 ```
 
-**`helix_compare`** *(Professional/Enterprise)*
+**`helix_compare`** *(Advanced/Enterprise)*
 ```json
 {
   "name": "helix_compare",
   "inputSchema": {
     "type": "object",
     "properties": {
-      "compounds":  { "type": "array", "items": { "type": "string" }, "minItems": 2, "maxItems": 3 },
+      "compounds":  { "type": "array", "items": { "type": "string" }, "minItems": 2, "maxItems": 4 },
       "indication": { "type": "string", "default": "General comparison" },
       "language":   { "type": "string", "enum": ["en","ar"], "default": "en" },
       "api_key":    { "type": "string" }
@@ -467,7 +467,7 @@ All 24 tool schemas. The `inputSchema` block is what Claude Desktop and MCP clie
 }
 ```
 
-**`helix_dossier_start`** *(Professional/Enterprise)*
+**`helix_dossier_start`** *(Advanced/Enterprise)*
 ```json
 {
   "name": "helix_dossier_start",
@@ -774,7 +774,7 @@ All `/api/v1/*` endpoints require:
 Authorization: Bearer YOUR_API_KEY
 ```
 
-API keys are SHA-256 hashed before storage. **The plaintext key is shown exactly once at creation** — store it immediately in your secrets manager. If lost, revoke and rotate; there is no recovery path.
+API keys are SHA-256 hashed before storage. **The plaintext key is shown exactly once at creation** — store it immediately in your secrets manager. If lost, revoke and rotate; there is no recovery path. The same Partner API key is used for both REST and MCP, but the transports differ: REST `/api/v1/*` endpoints expect the key in the `Authorization: Bearer YOUR_API_KEY` header, while the remote MCP/SSE server expects it in the `x-api-key: hk_live_...` header.
 
 Key management: Partner Portal → API Keys (`/partner/api`)
 
@@ -799,16 +799,16 @@ Rate limits apply across all `/api/v1/*` endpoints on a **sliding 60-second wind
 
 | Plan | Monthly Base | Tokens Included | Rate Limit | Overage Rate | Hard Cap |
 |---|---|---|---|---|---|
-| **API Starter** | $499 | 5M tokens | 60 req/min | $25 / 1M | 10M tokens (then 429) |
-| **API Advanced** | $1,999 | 25M tokens | 150 req/min | $25 / 1M | 75M tokens (then 429) |
-| **API Enterprise** | $4,999 | 50M tokens | Custom | $25 / 1M | None (overage billed) |
+| **API Starter** | $499 | 5M tokens | 60 req/min | $80 / 1M | 10M tokens (then 429) |
+| **API Advanced** | $1,999 | 25M tokens | 150 req/min | $80 / 1M | 75M tokens (then 429) |
+| **API Enterprise** | $4,999 | 75M tokens | Custom | Custom | None (overage billed) |
 | Legacy partners (pre-billing) | — | — | 20 req/min | — | — |
 
 **Over-limit response:** `HTTP 429` with `Retry-After` header.
 
 **Burst behavior:** The rate limiter uses a sliding 60-second window (atomic SQL counter, cross-instance safe). There is **no burst allowance** — the counter is evaluated on every request, and once the per-minute ceiling is reached the next request immediately returns 429. Honor the `Retry-After` value before retrying.
 
-**Hard cap semantics:** Starter and Advanced plans block at their hard cap (returning 429) until the billing period resets. Enterprise has no hard cap — overage is billed at $25/1M tokens.
+**Hard cap semantics:** Starter and Advanced plans block at their hard cap (returning 429) until the billing period resets. Enterprise has no hard cap — overage is billed at custom contract rates.
 
 **Quota alerts:** All plans receive email/webhook alerts at **80%** and **100%** of the included token allowance, so you're never surprised by overage.
 
@@ -899,13 +899,13 @@ All plans include access to `/query`, `/protocols`, `/status`, `/openapi.json`, 
 | | API Starter | API Advanced | API Enterprise |
 |---|---|---|---|
 | **Monthly base** | $499 | $1,999 | $4,999 |
-| **Tokens included / month** | 5,000,000 | 25,000,000 | 50,000,000 |
-| **Overage rate** | $25 / 1M tokens | $25 / 1M tokens | $25 / 1M tokens |
+| **Tokens included / month** | 5,000,000 | 25,000,000 | 75,000,000 |
+| **Overage rate** | $80 / 1M tokens | $80 / 1M tokens | Custom |
 | **Hard cap** | 10M tokens — then 429 | 75M tokens — then 429 | None (overage billed) |
 | **Quota alerts** | 80% + 100% | 80% + 100% | 80% + 100% |
 | **Rate limit** | 60 req/min | 150 req/min | Custom |
 
-> **Hard cap semantics:** When a Starter or Advanced partner hits their hard cap, the API returns `429 BUDGET_EXCEEDED` for the remainder of the billing period. The counter resets at the start of the next period. Enterprise partners have no hard cap — usage above 50M tokens is billed at $25/1M.
+> **Hard cap semantics:** When a Starter or Advanced partner hits their hard cap, the API returns `429 BUDGET_EXCEEDED` for the remainder of the billing period. The counter resets at the start of the next period. Enterprise partners have no hard cap — usage above the included 75M tokens is billed at custom contract rates.
 
 > Token usage is tracked per billing period (scoped to Stripe's `current_period_start` when a subscription is active, or calendar month as a fallback). Current usage is returned in every `/api/v1/helix/query` response in the `usage` object and in the Partner Portal under **Usage & Billing**.
 
@@ -913,17 +913,17 @@ All plans include access to `/query`, `/protocols`, `/status`, `/openapi.json`, 
 
 | Feature | API Starter | API Advanced | API Enterprise |
 |---|---|---|---|
-| `/api/v1/helix/query` | ✅ | ✅ | ✅ |
-| `/api/v1/helix/protocols/:compound` | ✅ | ✅ | ✅ |
-| `/api/v1/scribe/generate` | ✅ | ✅ | ✅ |
-| `/api/v1/helix/dossier` | ❌ 403 | ✅ | ✅ |
-| `/api/v1/helix/compare` | ❌ 403 | ✅ | ✅ |
-| MCP: `helix_compare` | ❌ | ✅ | ✅ |
-| MCP: `helix_dossier_start` | ❌ | ✅ | ✅ |
+| `/api/v1/helix/query` | Yes | Yes | Yes |
+| `/api/v1/helix/protocols/:compound` | Yes | Yes | Yes |
+| `/api/v1/scribe/generate` | Yes | Yes | Yes |
+| `/api/v1/helix/dossier` | No — 403 | Yes | Yes |
+| `/api/v1/helix/compare` | No — 403 | Yes | Yes |
+| MCP: `helix_compare` | No | Yes | Yes |
+| MCP: `helix_dossier_start` | No | Yes | Yes |
 | Seats | Up to 5 | Up to 25 | Unlimited (per contract) |
-| White-label portal | ❌ | ❌ | ✅ |
-| BAA (HIPAA) | ❌ | ❌ | ✅ |
-| Dedicated support | ❌ | ❌ | ✅ |
+| White-label portal | No | No | Yes |
+| BAA (HIPAA) | No | No | Yes |
+| Dedicated support | No | No | Yes |
 
 Contact [info@hormonaly.ai](mailto:info@hormonaly.ai) or see [hormonaly.ai/pricing](https://hormonaly.ai/pricing) for current plan details.
 
@@ -1019,7 +1019,7 @@ No authentication required.
 
 ### AI Safety
 
-- **NVIDIA NeMo safety layer** on every query: input PII redaction + off-topic/harm-framing filter (NVIDIA nemotron-mini-4b-instruct); output dosing safety scan with inline ⚠️ warnings (additive only — never blocks a response, only appends caution flags).
+- **NVIDIA NeMo safety layer** on every query: input PII redaction + off-topic/harm-framing filter (NVIDIA nemotron-mini-4b-instruct); output dosing safety scan with inline warnings (additive only — never blocks a response, only appends caution flags).
 - **PEPTIDE_SAFETY_FOOTER** and **HELIX_REGULATORY_RULES** active on all responses.
 - **No model training on user data** — query data is not used to train or fine-tune any model.
 
@@ -1285,6 +1285,9 @@ When an endpoint or field is deprecated:
 | May 2026 | Tiered token budgets, hard caps, and overage rates documented (sourced from `shared/plan-pricing.ts`) |
 | May 2026 | Full MCP tool schemas (all 24 tools) published |
 | May 2026 | Three-Lens Scoring, Webhook Events, API Versioning sections added |
+| Jun 2026 | Overage rate updated to $80/1M (Starter/Advanced), custom for Enterprise; design partners and Hormonaly Library added |
+| Jun 2026 | Status emoji replaced with text labels for a cleaner format; Anabol.ai consumer harm-reduction platform added |
+| Jun 2026 | Added investors & strategic partners: KBW Ventures (portfolio company) and NVIDIA Inception / Innovation Lab grant |
 ---
 
 ## About Hormonaly
@@ -1295,9 +1298,19 @@ Hormonaly was founded by **Fady Hannah-Shmouni, MD FRCPC** — board-certified e
 
 **Advisory Board:** Ali Mostashari, PhD (LifeNome) · Constantine Stratakis, MD (ASTREA) · Cory S. Goldberg, MD · John Kozman (Supernatural) · Dominik Thor, MSc (GCLS) · Labib Ghulmiyyah, MD · Zahraa Abdul Sater, MBBS
 
-**Design partner clinics (18):** FORM Face + Body, REBORNE Longevity, Healthspan Digital, PearlMD, Toronto Functional Medicine Centre, A-Life, Astrea Health, Valeo Health, and others.
+**Backed by:** Hormonaly is a portfolio company of **KBW Ventures**, the global investment firm founded by Prince Khaled bin Alwaleed bin Talal, with a shared focus on scaling agentic AI across modern medicine and education for the MENA region and beyond. Hormonaly is also an **NVIDIA Inception** member and a recipient of an **NVIDIA Innovation Lab** grant — accelerated compute and engineering support to build clinical-grade, domain-specific AI models (sharper evidence retrieval, GRADE classification, and safety guardrails) for peptide and hormone medicine.
 
-**Educational partners:** DrVibe.ai (1,000+ clinicians trained across 5 countries) · GCLS.ai (Geneva College of Longevity Science)
+**Design partner clinics & partners (21):** FORM Face + Body, REBORNE Longevity, Healthspan Digital, PearlMD, Toronto Functional Medicine Centre, A-Life, Astrea Health, Valeo Health, Celia Holdings, Celia Rx, Pillvery, and others.
+
+**Educational partners:** DrVibe.ai (1,000+ clinicians trained across 5 countries) · GCLS.ai (Geneva College of Longevity Science) — which certifies Hormonaly's [**AI in Healthcare** certification course](https://gcls.academy/welcome) for physicians, clinical leaders, and healthcare executives.
+
+**Hormonaly Library ([hormonaly.com](https://hormonaly.com/)):** Evidence-based, science-backed hormone-health books and downloadable PDF guides authored by Fady Hannah-Shmouni, MD FRCPC — including *The Peptide Pocket Guide*, *Peptides Simplified*, *BPC-157: Evidence Simplified*, *Peptides, Hormones & Longevity*, and *Aesthetic & Regenerative Endocrinology* (with Arabic editions and free samples). Instant download after checkout.
+
+**Anabol.ai ([anabol.ai](https://www.anabol.ai/)):** A free, consumer-facing harm-reduction and education platform powered by Hormonaly. It provides AI-powered, evidence-graded research across steroids, peptides, SARMs, and regenerative compounds — synthesizing peer-reviewed PubMed studies into clear, sourced answers on dosing, side effects, interactions, and safety. Every compound page surfaces side effects, interactions, and evidence quality, with a multi-agent engine that continuously monitors PubMed and auto-ingests new findings. It is an educational resource only — not medical advice.
+
+### Enterprise — TelehealthOS & Canvas Medical
+
+For enterprise care teams, Hormonaly offers **[TelehealthOS](https://hormonaly.ai/telehealth-os)** — a custom, AI-native infrastructure for launching and scaling peptide, hormone, skincare, and longevity telehealth operations. Through a partnership with **Canvas Medical**, enterprise customers get HIPAA, SOC 2, and HITRUST certified clinical infrastructure: EPCS-ready **certified e-prescribing** (pharmacy routing, drug-interaction checks, and full prescription audit trails), an **integrated EHR/EMR** with charting and patient timelines, and compounding fulfillment through **503A and 503B** FDA-registered, cGMP pharmacies. The Hormonaly clinical API plugs directly into this stack — powering patient intake, lab review, evidence-graded protocol generation, and follow-up. This compliant clinical infrastructure is available exclusively to enterprise care teams via the Canvas Medical integration; contact info@hormonaly.ai or see [hormonaly.ai/telehealth-os](https://hormonaly.ai/telehealth-os).
 
 ---
 
