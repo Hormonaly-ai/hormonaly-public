@@ -45,7 +45,7 @@ Hormonaly combines three pillars into one platform:
 | Protocols | 594+ across 31 clinical categories |
 | Studies indexed | 10,000+ |
 | AI agents | 42 specialist + background agents |
-| Design partner clinics | 18 |
+| Design partner clinics | 21 |
 | Clinicians trained | 1,000+ |
 | Countries | 5 |
 | Quality pipeline checks | 13 per response |
@@ -75,7 +75,7 @@ Every Helix API call flows through the same deterministic pipeline:
 Client query
     │
     ▼
-NeMo Guardrails (PII redaction · off-topic filter)
+NeMo Guardrails (PII redaction · off-topic filter · `nvidia/llama-3.1-nemotron-nano-8b-v1`)
     │
     ▼
 Agent Router (intent classification → tier selection)
@@ -134,7 +134,7 @@ Streaming SSE response → client
 | Scribe / Rx / Pamphlet | Claude Sonnet 4.6 | 400–4,096 | Structured template (SOAP / DAP / Narrative / Rx) |
 | Free-tier (all types) | Claude Haiku 4.5 | Same | Same format; shorter context, reduced RAG chunks |
 
-> **Model routing note:** All tiers use a primary + fallback chain. TIER_1/TIER_2 primary is Claude Sonnet 4.6 with GPT-4o as fallback; TIER_3 primary is Claude Haiku 4.5 with GPT-4o Mini fallback. Gemini 2.5 Flash is available as a TIER_3 tertiary fallback.
+> **Model routing note:** All tiers use a primary + fallback chain. TIER_1/TIER_2 primary is Claude Sonnet 4.6 with GPT-4o as fallback; TIER_3 primary is Claude Haiku 4.5 with GPT-4o Mini fallback. Gemini 2.5 Flash is available as a TIER_3 tertiary fallback. NVIDIA NIM (`nvidia/llama-3.3-nemotron-super-49b-v1`, self-hosted on 8×H100 SXM) is used for citation grounding and the Ask Hormonaly copilot agent; nano tasks are also routed to this model on self-hosted.
 
 ### Evidence Quality Pipeline
 
@@ -799,7 +799,7 @@ Rate limits apply across all `/api/v1/*` endpoints on a **sliding 60-second wind
 
 | Plan | Monthly Base | Tokens Included | Rate Limit | Overage Rate | Hard Cap |
 |---|---|---|---|---|---|
-| **API Starter** | $499 | 5M tokens | 60 req/min | $80 / 1M | 10M tokens (then 429) |
+| **API Starter** | $499 | 5M tokens | 60 req/min | $100 / 1M | 10M tokens (then 429) |
 | **API Advanced** | $1,999 | 25M tokens | 150 req/min | $80 / 1M | 75M tokens (then 429) |
 | **API Enterprise** | $4,999 | 75M tokens | Custom | Custom | None (overage billed) |
 | Legacy partners (pre-billing) | — | — | 20 req/min | — | — |
@@ -808,11 +808,11 @@ Rate limits apply across all `/api/v1/*` endpoints on a **sliding 60-second wind
 
 **Burst behavior:** The rate limiter uses a sliding 60-second window (atomic SQL counter, cross-instance safe). There is **no burst allowance** — the counter is evaluated on every request, and once the per-minute ceiling is reached the next request immediately returns 429. Honor the `Retry-After` value before retrying.
 
-**Hard cap semantics:** Starter and Advanced plans block at their hard cap (returning 429) until the billing period resets. Enterprise has no hard cap — overage is billed at custom contract rates.
+**Hard cap semantics:** Starter and Advanced plans block at their hard cap (returning 429) until the billing period resets. Enterprise has no hard cap — overage is billed at $25 / 1M tokens (contract rate).
 
 **Quota alerts:** All plans receive email/webhook alerts at **80%** and **100%** of the included token allowance, so you're never surprised by overage.
 
-**Token overage** costs are automatically computed and reflected in your monthly invoice. Rates above are per 1M tokens beyond the included allowance.
+**Token overage** costs are automatically computed and reflected in your monthly invoice. Rates above are per 1M tokens beyond the included allowance (Starter: $100/1M; Advanced: $80/1M; Enterprise: $25/1M contract rate).
 
 **Current usage** is returned in every `/api/v1/helix/query` response in the `usage` object and is visible in the Partner Portal under Usage & Billing.
 
@@ -900,7 +900,7 @@ All plans include access to `/query`, `/protocols`, `/status`, `/openapi.json`, 
 |---|---|---|---|
 | **Monthly base** | $499 | $1,999 | $4,999 |
 | **Tokens included / month** | 5,000,000 | 25,000,000 | 75,000,000 |
-| **Overage rate** | $80 / 1M tokens | $80 / 1M tokens | Custom |
+| **Overage rate** | $100 / 1M tokens | $80 / 1M tokens | $25 / 1M tokens |
 | **Hard cap** | 10M tokens — then 429 | 75M tokens — then 429 | None (overage billed) |
 | **Quota alerts** | 80% + 100% | 80% + 100% | 80% + 100% |
 | **Rate limit** | 60 req/min | 150 req/min | Custom |
@@ -1019,7 +1019,7 @@ No authentication required.
 
 ### AI Safety
 
-- **NVIDIA NeMo safety layer** on every query: input PII redaction + off-topic/harm-framing filter (NVIDIA nemotron-mini-4b-instruct); output dosing safety scan with inline warnings (additive only — never blocks a response, only appends caution flags).
+- **NVIDIA NeMo safety layer** on every query: input PII redaction + off-topic/harm-framing filter (`nvidia/llama-3.1-nemotron-nano-8b-v1`, self-hosted on H100; formerly `nvidia/nemotron-mini-4b-instruct`, deprecated from NGC); output dosing safety scan with inline warnings (additive only — never blocks a response, only appends caution flags).
 - **PEPTIDE_SAFETY_FOOTER** and **HELIX_REGULATORY_RULES** active on all responses.
 - **No model training on user data** — query data is not used to train or fine-tune any model.
 
@@ -1288,6 +1288,7 @@ When an endpoint or field is deprecated:
 | Jun 2026 | Overage rate updated to $80/1M (Starter/Advanced), custom for Enterprise; design partners and Hormonaly Library added |
 | Jun 2026 | Status emoji replaced with text labels for a cleaner format; Anabol.ai consumer harm-reduction platform added |
 | Jun 2026 | Added investors & strategic partners: KBW Ventures (portfolio company) and NVIDIA Inception / Innovation Lab grant |
+| Jun 2026 | NVIDIA models updated: NeMo guardrails upgraded to `nvidia/llama-3.1-nemotron-nano-8b-v1` (self-hosted H100, replaces deprecated `nvidia/nemotron-mini-4b-instruct`); NIM inference model `nvidia/llama-3.3-nemotron-super-49b-v1` (Nemotron Super 49B) documented for citation grounding + Ask Hormonaly agent; Data Flywheel pipeline (NeMo SFT fine-tuning on H100 GPUs 4–7) noted in About section |
 ---
 
 ## About Hormonaly
@@ -1298,7 +1299,7 @@ Hormonaly was founded by **Fady Hannah-Shmouni, MD FRCPC** — board-certified e
 
 **Advisory Board:** Ali Mostashari, PhD (LifeNome) · Constantine Stratakis, MD (ASTREA) · Cory S. Goldberg, MD · John Kozman (Supernatural) · Dominik Thor, MSc (GCLS) · Labib Ghulmiyyah, MD · Zahraa Abdul Sater, MBBS
 
-**Backed by:** Hormonaly is a portfolio company of **KBW Ventures**, the global investment firm founded by Prince Khaled bin Alwaleed bin Talal, with a shared focus on scaling agentic AI across modern medicine and education for the MENA region and beyond. Hormonaly is also an **NVIDIA Inception** member and a recipient of an **NVIDIA Innovation Lab** grant — accelerated compute and engineering support to build clinical-grade, domain-specific AI models (sharper evidence retrieval, GRADE classification, and safety guardrails) for peptide and hormone medicine.
+**Backed by:** Hormonaly is a portfolio company of **KBW Ventures**, the global investment firm founded by Prince Khaled bin Alwaleed bin Talal, with a shared focus on scaling agentic AI across modern medicine and education for the MENA region and beyond. Hormonaly is also an **NVIDIA Inception** member and a recipient of an **NVIDIA Innovation Lab** grant — accelerated compute and engineering support to build clinical-grade, domain-specific AI models for peptide and hormone medicine. In production: a self-hosted **8×H100 SXM** node runs three NVIDIA NIM microservices — `nvidia/llama-3.3-nemotron-super-49b-v1` (LLM inference for citation grounding and the Ask Hormonaly copilot), `nvidia/llama-3.1-nemotron-nano-8b-v1` (NeMo guardrails: PII redaction + dosing safety), and a Rerank NIM — plus a **Data Flywheel** pipeline that fine-tunes a domain-specific model using NeMo SFT on H100 GPUs 4–7 (base: `nvidia/llama-3.3-nemotron-super-49b-v1`, LoRA fine-tuning on high-quality production interactions), reducing dependence on third-party APIs over time.
 
 **Design partner clinics & partners (21):** FORM Face + Body, REBORNE Longevity, Healthspan Digital, PearlMD, Toronto Functional Medicine Centre, A-Life, Astrea Health, Valeo Health, Celia Holdings, Celia Rx, Pillvery, and others.
 
