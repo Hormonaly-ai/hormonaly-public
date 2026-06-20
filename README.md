@@ -801,7 +801,7 @@ Rate limits apply across all `/api/v1/*` endpoints on a **sliding 60-second wind
 |---|---|---|---|---|---|
 | **API Starter** | $499 | 5M tokens | 60 req/min | $100 / 1M | 10M tokens (then 429) |
 | **API Advanced** | $1,999 | 25M tokens | 150 req/min | $80 / 1M | 75M tokens (then 429) |
-| **API Enterprise** | $4,999 | 75M tokens | Custom | Custom | None (overage billed) |
+| **API Enterprise** | $4,999 | 75M tokens | Custom | $25 / 1M | None (overage billed) |
 | Legacy partners (pre-billing) | — | — | 20 req/min | — | — |
 
 **Over-limit response:** `HTTP 429` with `Retry-After` header.
@@ -905,7 +905,7 @@ All plans include access to `/query`, `/protocols`, `/status`, `/openapi.json`, 
 | **Quota alerts** | 80% + 100% | 80% + 100% | 80% + 100% |
 | **Rate limit** | 60 req/min | 150 req/min | Custom |
 
-> **Hard cap semantics:** When a Starter or Advanced partner hits their hard cap, the API returns `429 BUDGET_EXCEEDED` for the remainder of the billing period. The counter resets at the start of the next period. Enterprise partners have no hard cap — usage above the included 75M tokens is billed at custom contract rates.
+> **Hard cap semantics:** When a Starter or Advanced partner hits their hard cap, the API returns `429 BUDGET_EXCEEDED` for the remainder of the billing period. The counter resets at the start of the next period. Enterprise partners have no hard cap — usage above the included 75M tokens is billed at $25 / 1M tokens (contract rate).
 
 > Token usage is tracked per billing period (scoped to Stripe's `current_period_start` when a subscription is active, or calendar month as a fallback). Current usage is returned in every `/api/v1/helix/query` response in the `usage` object and in the Partner Portal under **Usage & Billing**.
 
@@ -1003,7 +1003,7 @@ No authentication required.
 | TLS | TLS 1.3 in transit; AES-256 at rest |
 | WAF | Cloud Armor active; scanner traffic blocked |
 | CSP / HSTS / CORS | All headers configured; `report-uri` Sentry telemetry active |
-| Clinical guardrails | NVIDIA NeMo (input PII redaction, output dosing safety scan) |
+| Clinical guardrails | NVIDIA NeMo · `nvidia/llama-3.1-nemotron-nano-8b-v1` (input PII redaction + off-topic filter) · `nvidia/llama-3.3-nemotron-super-49b-v1` (citation grounding + dosing safety scan) |
 | Supply chain | `private: true` in `package.json`; dependency audit clean (Mar 2026) |
 
 ### Compliance Posture
@@ -1285,7 +1285,7 @@ When an endpoint or field is deprecated:
 | May 2026 | Tiered token budgets, hard caps, and overage rates documented (sourced from `shared/plan-pricing.ts`) |
 | May 2026 | Full MCP tool schemas (all 24 tools) published |
 | May 2026 | Three-Lens Scoring, Webhook Events, API Versioning sections added |
-| Jun 2026 | Overage rate updated to $80/1M (Starter/Advanced), custom for Enterprise; design partners and Hormonaly Library added |
+| Jun 2026 | Overage rate corrected: Starter $100/1M, Advanced $80/1M, Enterprise $25/1M (sourced from `shared/plan-pricing.ts`); design partners updated to 21; Hormonaly Library added |
 | Jun 2026 | Status emoji replaced with text labels for a cleaner format; Anabol.ai consumer harm-reduction platform added |
 | Jun 2026 | Added investors & strategic partners: KBW Ventures (portfolio company) and NVIDIA Inception / Innovation Lab grant |
 | Jun 2026 | NVIDIA models updated: NeMo guardrails upgraded to `nvidia/llama-3.1-nemotron-nano-8b-v1` (self-hosted H100, replaces deprecated `nvidia/nemotron-mini-4b-instruct`); NIM inference model `nvidia/llama-3.3-nemotron-super-49b-v1` (Nemotron Super 49B) documented for citation grounding + Ask Hormonaly agent; Data Flywheel pipeline (NeMo SFT fine-tuning on H100 GPUs 4–7) noted in About section |
