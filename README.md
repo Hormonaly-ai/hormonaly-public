@@ -81,8 +81,8 @@ NeMo Guardrails (PII redaction · off-topic filter · `nvidia/llama-3.1-nemotron
 Agent Router (intent classification → tier selection)
     │
     ├── TIER_1_BEST:     Claude Sonnet 4.6 → GPT-4o fallback  (complex/clinical queries)
-    ├── TIER_2_BALANCED: Claude Sonnet 4.6 → GPT-4o fallback  (Scribe, CDS, Rx)
-    └── TIER_3_FAST:     Claude Haiku 4.5 → GPT-4o Mini fallback  (free tier, Three-Lens scoring)
+    ├── TIER_2_BALANCED: Claude Sonnet 4.6 → GPT-4o → Claude Haiku 4.5 fallback  (Scribe, CDS, Rx)
+    └── TIER_3_FAST:     Claude Haiku 4.5 → GPT-4o Mini → Gemini 2.5 Flash → Claude Sonnet 4.6 fallback  (free tier, Three-Lens scoring)
     │
     ▼
 Multi-Database RAG Retrieval (6 databases · 80K token cap)
@@ -134,7 +134,7 @@ Streaming SSE response → client
 | Scribe / Rx / Pamphlet | Claude Sonnet 4.6 | 400–4,096 | Structured template (SOAP / DAP / Narrative / Rx) |
 | Free-tier (all types) | Claude Haiku 4.5 | Same | Same format; shorter context, reduced RAG chunks |
 
-> **Model routing note:** All tiers use a primary + fallback chain. TIER_1/TIER_2 primary is Claude Sonnet 4.6 with GPT-4o as fallback; TIER_3 primary is Claude Haiku 4.5 with GPT-4o Mini fallback. Gemini 2.5 Flash is available as a TIER_3 tertiary fallback. NVIDIA NIM (`nvidia/llama-3.3-nemotron-super-49b-v1`, self-hosted on 8×H100 SXM) is used for citation grounding and the Ask Hormonaly copilot agent; nano tasks are also routed to this model on self-hosted.
+> **Model routing note:** All tiers use a primary + fallback chain. TIER_1 chain: Claude Sonnet 4.6 → GPT-4o. TIER_2 chain: Claude Sonnet 4.6 → GPT-4o → Claude Haiku 4.5. TIER_3 chain: Claude Haiku 4.5 → GPT-4o Mini → Gemini 2.5 Flash → Claude Sonnet 4.6. NVIDIA NIM (`nvidia/llama-3.3-nemotron-super-49b-v1`, self-hosted on 8×H100 SXM) is used for citation grounding and the Ask Hormonaly copilot agent; nano tasks are also routed to this model on self-hosted.
 
 ### Evidence Quality Pipeline
 
@@ -1289,6 +1289,7 @@ When an endpoint or field is deprecated:
 | Jun 2026 | Status emoji replaced with text labels for a cleaner format; Anabol.ai consumer harm-reduction platform added |
 | Jun 2026 | Added investors & strategic partners: KBW Ventures (portfolio company) and NVIDIA Inception / Innovation Lab grant |
 | Jun 2026 | NVIDIA models updated: NeMo guardrails upgraded to `nvidia/llama-3.1-nemotron-nano-8b-v1` (self-hosted H100, replaces deprecated `nvidia/nemotron-mini-4b-instruct`); NIM inference model `nvidia/llama-3.3-nemotron-super-49b-v1` (Nemotron Super 49B) documented for citation grounding + Ask Hormonaly agent; Data Flywheel pipeline (NeMo SFT fine-tuning on H100 GPUs 4–7) noted in About section |
+| Jun 2026 | Tier fallback chains corrected in Query Pipeline and Model Routing diagrams: TIER_2 now shows 3-deep chain (Sonnet 4.6 → GPT-4o → Haiku 4.5); TIER_3 now shows 4-deep chain (Haiku 4.5 → GPT-4o Mini → Gemini 2.5 Flash → Sonnet 4.6) |
 ---
 
 ## About Hormonaly
