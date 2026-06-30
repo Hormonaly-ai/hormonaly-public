@@ -1,0 +1,13 @@
+{
+  "_comment": "Hormonaly MCP Server configuration. Copy to hormonaly-mcp-config.json and fill in your values.",
+  "api_url": "https://hormonaly.ai",
+  "helix_api_key": "hk_live_YOUR_KEY_HERE",
+  "session_token": "",
+  "admin_session_token": "",
+  "_notes": {
+    "api_url": "Base URL of the Hormonaly platform. Use http://localhost:5000 for local dev.",
+    "helix_api_key": "Partner API key for Helix B2B endpoints. Starts with hk_live_",
+    "session_token": "Session cookie value (connect.sid) for user-authenticated tools. Get from browser DevTools → Cookies.",
+    "admin_session_token": "Admin session cookie. Only needed for admin_* tools."
+  }
+}
