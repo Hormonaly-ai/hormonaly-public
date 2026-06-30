@@ -1,13 +1,13 @@
 # Hormonaly — Public API & Integration Reference
 
-> **The AI-native clinical OS for peptide, hormone, and longevity medicine.**
+> **The AI-native infrastructure for peptide, hormone, and longevity medicine.**
 
 [![Status](https://img.shields.io/badge/status-status.hormonaly.ai-brightgreen)](https://status.hormonaly.ai)
 [![OpenAPI](https://img.shields.io/badge/OpenAPI-spec-blue)](https://hormonaly.ai/api/v1/helix/openapi.json)
 [![MCP Server](https://img.shields.io/badge/MCP-24%20tools-purple)](#mcp-server--tool-schema)
 [![Hormonaly-1](https://img.shields.io/badge/Hormonaly--1-Live%20Jun%202026-orange)](#hormonaly-1-llm)
 
-This repository is the public-facing integration reference for enterprise partners and API integrators. The MCP server source is published at [Hormonaly-ai/hormonaly-platform](https://github.com/Hormonaly-ai/hormonaly-platform/tree/main/mcp/hormonaly-mcp-server). For clinical access, visit [hormonaly.ai](https://hormonaly.ai).
+This repository is the public-facing integration reference for enterprise partners and API integrators. The MCP server source is published in this repository at [Hormonaly-ai/hormonaly-public](https://github.com/Hormonaly-ai/hormonaly-public). For clinical access, visit [hormonaly.ai](https://hormonaly.ai).
 
 ---
 
@@ -261,8 +261,8 @@ The Hormonaly MCP server exposes 24 tools that allow Claude Desktop, Cursor, or 
 The MCP server source is available in our GitHub repository. Clone and build locally:
 
 ```bash
-git clone https://github.com/Hormonaly-ai/hormonaly-platform.git
-cd hormonaly-platform/mcp/hormonaly-mcp-server
+git clone https://github.com/Hormonaly-ai/hormonaly-public.git
+cd hormonaly-public/mcp/hormonaly-mcp-server
 npm install && npm run build
 ```
 
