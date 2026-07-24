@@ -234,7 +234,7 @@ Poll with `GET /helix/dossier/:job_id` until `status: "complete"`.
 
 #### POST /helix/compare
 
-Compare 2–4 protocols head-to-head across evidence grade, safety, dosing, and clinical readiness. Advanced or Enterprise tier required.
+Compare 2–3 protocols head-to-head across evidence grade, safety, dosing, and clinical readiness. Advanced or Enterprise tier required.
 
 Request:
 
@@ -335,7 +335,7 @@ Partner API keys start with `hk_live_` and are issued from the Partner Portal. T
 | Tool | Description | Auth |
 |---|---|---|
 | helix_query | Clinical question → evidence-graded answer with citations and confidence score | API key |
-| helix_compare | Compare 2–4 compounds head-to-head (Advanced/Enterprise) | API key |
+| helix_compare | Compare 2–3 compounds head-to-head (Advanced/Enterprise) | API key |
 | helix_protocol | Get all protocols for a compound from the Helix API | API key |
 | helix_dossier_start | Start an async dossier generation job (Advanced/Enterprise) | API key |
 | helix_dossier_status | Poll dossier job status by job_id | API key |
@@ -357,7 +357,7 @@ Partner API keys start with `hk_live_` and are issued from the Partner Portal. T
 |---|---|---|
 | evidence_search | Search PubMed for research on a compound or condition | Public (no auth) |
 | evidence_get | Get full evidence record by ID | Public (no auth) |
-| evidence_grade | Grade a set of PMID references using GRADE framework — returns A/B/C/D per study with rationale | Public (no auth) |
+| evidence_grade | Grade a set of PMID references using GRADE framework — returns A/B/C/D per study with rationale | API key |
 
 #### Compound Tools
 
@@ -426,7 +426,7 @@ All 24 tool schemas. The `inputSchema` block is what Claude Desktop and MCP clie
   "inputSchema": {
     "type": "object",
     "properties": {
-      "compounds": { "type": "array", "items": { "type": "string" }, "minItems": 2, "maxItems": 4 },
+      "compounds": { "type": "array", "items": { "type": "string" }, "minItems": 2, "maxItems": 3 },
       "indication": { "type": "string", "default": "General comparison" },
       "language": { "type": "string", "enum": ["en","ar"], "default": "en" },
       "api_key": { "type": "string" }
@@ -629,7 +629,8 @@ All 24 tool schemas. The `inputSchema` block is what Claude Desktop and MCP clie
     "type": "object",
     "properties": {
       "ids": { "type": "array", "items": { "type": "string" }, "minItems": 1, "maxItems": 20,
-      "description": "Evidence record IDs to GRADE-score" }
+      "description": "Evidence record IDs to GRADE-score" },
+      "api_key": { "type": "string", "description": "Helix API key" }
     },
     "required": ["ids"]
   }
