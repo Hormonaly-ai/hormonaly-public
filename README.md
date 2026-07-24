@@ -250,6 +250,30 @@ Service health check. No authentication required.
 { "status": "ok", "latency_p50_ms": 4200, "citation_coverage": "99%" }
 ```
 
+#### POST /helix/workflow
+
+Run a full multi-agent clinical reasoning workflow (supervisor/worker pattern). The supervisor decomposes the question, dispatches specialist sub-agents (evidence, safety, dosing, regulatory), then synthesizes a report. Requires a Helix API key. Latency: 30–90 seconds.
+
+Request:
+
+```json
+{ "question": "...", "patient_context": "optional: age, sex, conditions, medications", "language": "en" }
+```
+
+Response includes an `orchestration_steps[]` array describing each agent's task, result, timing, and confidence, plus the synthesized clinical report.
+
+#### POST /helix/deep-analysis
+
+Extended deep analysis using the full RAG pipeline with Three-Lens scoring and PMID citation verification. Requires an Enterprise-tier Helix API key.
+
+Request:
+
+```json
+{ "topic": "...", "language": "en" }
+```
+
+Response includes an overall evidence grade (A–D), confidence score, full PMID citation list, and Three-Lens scoring (longevity / health-disease / performance).
+
 ## MCP Server — Tool Schema
 
 Package: `@hormonaly/mcp-server`
