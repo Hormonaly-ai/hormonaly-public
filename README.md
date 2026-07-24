@@ -250,30 +250,6 @@ Service health check. No authentication required.
 { "status": "ok", "latency_p50_ms": 4200, "citation_coverage": "99%" }
 ```
 
-#### POST /helix/workflow
-
-Run a full multi-agent clinical reasoning workflow (supervisor/worker pattern). The supervisor decomposes the question, dispatches specialist sub-agents (evidence, safety, dosing, regulatory), then synthesizes a report. Requires a Helix API key. Latency: 30–90 seconds.
-
-Request:
-
-```json
-{ "question": "...", "patient_context": "optional: age, sex, conditions, medications", "language": "en" }
-```
-
-Response includes an `orchestration_steps[]` array describing each agent's task, result, timing, and confidence, plus the synthesized clinical report.
-
-#### POST /helix/deep-analysis
-
-Extended deep analysis using the full RAG pipeline with Three-Lens scoring and PMID citation verification. Requires an Enterprise-tier Helix API key.
-
-Request:
-
-```json
-{ "topic": "...", "language": "en" }
-```
-
-Response includes an overall evidence grade (A–D), confidence score, full PMID citation list, and Three-Lens scoring (longevity / health-disease / performance).
-
 ## MCP Server — Tool Schema
 
 Package: `@hormonaly/mcp-server`
@@ -345,8 +321,8 @@ The Hormonaly MCP server is deployed as a remote HTTP/SSE server and listed on t
 
 | Tool group | Auth required | Examples |
 |---|---|---|
-| Protocol, Evidence, Compound tools (10 tools) | None — public read access | protocol_search, evidence_search, compound_get_dosing |
-| Helix & agentic tools (7 tools) | API key required | helix_query, run_clinical_workflow, helix_deep_analysis |
+| Protocol, Evidence, Compound tools (9 tools) | None — public read access | protocol_search, compound_get_dosing (evidence_grade requires an API key) |
+| Helix & agentic tools (8 tools) | API key required | helix_query, run_clinical_workflow, helix_deep_analysis, evidence_grade |
 | User tools (4 tools) | Session token | user_get_profile, monitor_protocol_updates |
 | Admin tools (3 tools) | Admin session | admin_get_stats, admin_list_users |
 
@@ -373,7 +349,7 @@ Partner API keys start with `hk_live_` and are issued from the Partner Portal. T
 | protocol_search | Search protocol library by compound, category, or condition | Public (no auth) |
 | protocol_get | Get full protocol details by ID or slug | Public (no auth) |
 | protocol_list_categories | List all 31+ protocol categories with counts | Public (no auth) |
-| protocol_get_interactions | Check interactions between a set of compounds | Public (no auth) |
+| protocol_get_interactions | Check interactions between a set of compounds (batch endpoint requires session auth) | Session |
 
 #### Evidence Tools
 
