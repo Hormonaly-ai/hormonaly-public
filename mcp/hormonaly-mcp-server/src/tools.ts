@@ -63,7 +63,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: "helix_compare",
     description:
-      "Compare 2–3 compounds head-to-head using the Helix AI engine. Returns a structured comparison with key differences, best-for use cases, and a recommendation. Requires Professional or Enterprise tier Helix API key — Starter keys are blocked with 403 tier_insufficient.",
+      "Compare 2–3 compounds head-to-head using the Helix AI engine. Returns a structured comparison with key differences, best-for use cases, and a recommendation. Requires Advanced or Enterprise tier Helix API key — Starter keys are blocked with 403 TIER_REQUIRED.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -102,7 +102,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: "helix_dossier_start",
     description:
-      "Start generating a full evidence dossier for a compound (async job). Returns a job_id to poll with helix_dossier_status. Requires Professional or Enterprise tier — Starter keys are blocked with 403 tier_insufficient.",
+      "Start generating a full evidence dossier for a compound (async job). Returns a job_id to poll with helix_dossier_status. Requires Advanced or Enterprise tier — Starter keys are blocked with 403 TIER_REQUIRED.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -218,11 +218,12 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "evidence_grade",
-    description: "Grade a set of evidence records using the GRADE framework. Returns A/B/C/D per study with rationale. No authentication required.",
+    description: "Grade a set of evidence records using the GRADE framework. Returns A/B/C/D per study with rationale. Requires a Helix API key.",
     inputSchema: {
       type: "object" as const,
       properties: {
         ids: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 20, description: "Evidence record IDs to GRADE-score" },
+        api_key: { type: "string", description: "Helix API key (overrides HORMONALY_API_KEY env var)" },
       },
       required: ["ids"],
     },
@@ -251,7 +252,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "compound_get_dosing",
-    description: "Get evidence-based dosing ranges, administration routes, frequency, and cycle guidance for a compound. Returns the full dosing table from the protocol library including dose ranges, units, frequency, and clinical notes. No authentication required.",
+    description: "Get evidence-based dosing ranges, administration routes, frequency, and cycle guidance for a compound. Returns the compound record including its dosingRanges, routes, and clinical notes. No authentication required.",
     inputSchema: {
       type: "object" as const,
       properties: { slug: { type: "string", description: "Compound slug (e.g. 'testosterone-cypionate', 'bpc-157')" } },
@@ -398,41 +399,41 @@ export async function handleTool(
       case "protocol_search": {
         const params = new URLSearchParams({ query: String(args["query"]), limit: String(args["limit"] ?? 10) });
         if (args["category"]) params.set("category", String(args["category"]));
-        const result = await client.get(`/api/v1/protocols?${params}`, "public");
+        const result = await client.get(`/api/protocols?${params}`, "public");
         return ok(result);
       }
       case "protocol_get": {
-        const result = await client.get(`/api/v1/protocols/${args["id"]}`, "public");
+        const result = await client.get(`/api/protocols/${args["id"]}`, "public");
         return ok(result);
       }
       case "protocol_list_categories": {
-        const result = await client.get("/api/v1/protocols/categories", "public");
+        const result = await client.get("/api/categories", "public");
         return ok(result);
       }
       case "protocol_get_interactions": {
-        const compounds = (args["compounds"] as string[]).join(",");
-        const result = await client.get(`/api/interactions/batch?compounds=${compounds}`, "public");
+        const result = await client.post("/api/interactions/batch", { compounds: args["compounds"] }, "public");
         return ok(result);
       }
       // ── Evidence ────────────────────────────────────────────────────────────────────────────────────────────────
       case "evidence_search": {
         const params = new URLSearchParams({ compound: String(args["compound"]), max_results: String(args["max_results"] ?? 10) });
-        const result = await client.get(`/api/v1/evidence?${params}`, "public");
+        const result = await client.get(`/api/evidence?${params}`, "public");
         return ok(result);
       }
       case "evidence_get": {
-        const result = await client.get(`/api/v1/evidence/${args["id"]}`, "public");
+        const result = await client.get(`/api/evidence/${args["id"]}`, "public");
         return ok(result);
       }
       case "evidence_grade": {
-        const result = await client.post("/api/v1/evidence/grade", { ids: args["ids"] }, "public");
+        const effectiveClient = withApiKey(client, args["api_key"] as string | undefined);
+        const result = await effectiveClient.post("/api/v1/evidence/grade", { ids: args["ids"] }, "helix");
         return ok(result);
       }
       // ── Compound ────────────────────────────────────────────────────────────────────────────────────────────────
       case "compound_search": {
         const params = new URLSearchParams({ query: String(args["query"]) });
         if (args["category"]) params.set("category", String(args["category"]));
-        const result = await client.get(`/api/v1/compounds?${params}`, "public");
+        const result = await client.get(`/api/compounds?${params}`, "public");
         return ok(result);
       }
       case "compound_get_interactions": {
@@ -440,7 +441,7 @@ export async function handleTool(
         return ok(result);
       }
       case "compound_get_dosing": {
-        const result = await client.get(`/api/v1/compounds/${args["slug"]}/dosing`, "public");
+        const result = await client.get(`/api/compounds/${args["slug"]}`, "public");
         return ok(result);
       }
       // ── User ────────────────────────────────────────────────────────────────────────────────────────────────────────
