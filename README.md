@@ -234,7 +234,7 @@ Poll with `GET /helix/dossier/:job_id` until `status: "complete"`.
 
 #### POST /helix/compare
 
-Compare 2–4 protocols head-to-head across evidence grade, safety, dosing, and clinical readiness. Advanced or Enterprise tier required.
+Compare 2–3 protocols head-to-head across evidence grade, safety, dosing, and clinical readiness. Advanced or Enterprise tier required.
 
 Request:
 
@@ -321,8 +321,8 @@ The Hormonaly MCP server is deployed as a remote HTTP/SSE server and listed on t
 
 | Tool group | Auth required | Examples |
 |---|---|---|
-| Protocol, Evidence, Compound tools (10 tools) | None — public read access | protocol_search, evidence_search, compound_get_dosing |
-| Helix & agentic tools (7 tools) | API key required | helix_query, run_clinical_workflow, helix_deep_analysis |
+| Protocol, Evidence, Compound tools (9 tools) | None — public read access | protocol_search, compound_get_dosing (evidence_grade requires an API key) |
+| Helix & agentic tools (8 tools) | API key required | helix_query, run_clinical_workflow, helix_deep_analysis, evidence_grade |
 | User tools (4 tools) | Session token | user_get_profile, monitor_protocol_updates |
 | Admin tools (3 tools) | Admin session | admin_get_stats, admin_list_users |
 
@@ -335,7 +335,7 @@ Partner API keys start with `hk_live_` and are issued from the Partner Portal. T
 | Tool | Description | Auth |
 |---|---|---|
 | helix_query | Clinical question → evidence-graded answer with citations and confidence score | API key |
-| helix_compare | Compare 2–4 compounds head-to-head (Advanced/Enterprise) | API key |
+| helix_compare | Compare 2–3 compounds head-to-head (Advanced/Enterprise) | API key |
 | helix_protocol | Get all protocols for a compound from the Helix API | API key |
 | helix_dossier_start | Start an async dossier generation job (Advanced/Enterprise) | API key |
 | helix_dossier_status | Poll dossier job status by job_id | API key |
@@ -349,7 +349,7 @@ Partner API keys start with `hk_live_` and are issued from the Partner Portal. T
 | protocol_search | Search protocol library by compound, category, or condition | Public (no auth) |
 | protocol_get | Get full protocol details by ID or slug | Public (no auth) |
 | protocol_list_categories | List all 31+ protocol categories with counts | Public (no auth) |
-| protocol_get_interactions | Check interactions between a set of compounds | Public (no auth) |
+| protocol_get_interactions | Check interactions between a set of compounds (batch endpoint requires session auth) | Session |
 
 #### Evidence Tools
 
@@ -357,7 +357,7 @@ Partner API keys start with `hk_live_` and are issued from the Partner Portal. T
 |---|---|---|
 | evidence_search | Search PubMed for research on a compound or condition | Public (no auth) |
 | evidence_get | Get full evidence record by ID | Public (no auth) |
-| evidence_grade | Grade a set of PMID references using GRADE framework — returns A/B/C/D per study with rationale | Public (no auth) |
+| evidence_grade | Grade a set of PMID references using GRADE framework — returns A/B/C/D per study with rationale | API key |
 
 #### Compound Tools
 
@@ -426,7 +426,7 @@ All 24 tool schemas. The `inputSchema` block is what Claude Desktop and MCP clie
   "inputSchema": {
     "type": "object",
     "properties": {
-      "compounds": { "type": "array", "items": { "type": "string" }, "minItems": 2, "maxItems": 4 },
+      "compounds": { "type": "array", "items": { "type": "string" }, "minItems": 2, "maxItems": 3 },
       "indication": { "type": "string", "default": "General comparison" },
       "language": { "type": "string", "enum": ["en","ar"], "default": "en" },
       "api_key": { "type": "string" }
@@ -629,7 +629,8 @@ All 24 tool schemas. The `inputSchema` block is what Claude Desktop and MCP clie
     "type": "object",
     "properties": {
       "ids": { "type": "array", "items": { "type": "string" }, "minItems": 1, "maxItems": 20,
-      "description": "Evidence record IDs to GRADE-score" }
+      "description": "Evidence record IDs to GRADE-score" },
+      "api_key": { "type": "string", "description": "Helix API key" }
     },
     "required": ["ids"]
   }
