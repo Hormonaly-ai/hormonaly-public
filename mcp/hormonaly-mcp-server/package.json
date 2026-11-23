@@ -1,6 +1,6 @@
 {
   "name": "@hormonaly/mcp-server",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "description": "MCP server for the Hormonaly evidence platform — exposes Helix AI, protocol library, compounds, and evidence to Claude and other AI agents",
   "main": "dist/index.js",
   "type": "module",

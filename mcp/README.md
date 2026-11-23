@@ -1,13 +1,14 @@
-—# Hormonaly MCP Server
+# Hormonaly MCP Server
 
-Model Context Protocol (MCP) server for the Hormonaly evidence platform. Exposes the Helix AI engine, protocol library, compound database, and admin tools to Claude Desktop and any MCP-compatible AI agent.
+Model Context Protocol (MCP) server for the Hormonaly evidence platform. Exposes the Helix AI engine, protocol library, compound database and evidence records to Claude Desktop and any MCP-compatible AI agent.
+
+The server authenticates with a **partner API key only**. It has no session-cookie or admin mode.
 
 ## Installation
 
 ### Option A — Clone and build (recommended)
 
 ```bash
-# Clone the public repo and build
 git clone https://github.com/Hormonaly-ai/hormonaly-public.git
 cd hormonaly-public/mcp/hormonaly-mcp-server
 npm install
@@ -22,7 +23,7 @@ node /path/to/hormonaly-public/mcp/hormonaly-mcp-server/dist/index.js
 
 ## Configuration for Claude Desktop
 
-Add the following to your `claude_desktop_config.json` (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS, `%APPDATA%\\Claude\\claude_desktop_config.json` on Windows):
+Add the following to your `claude_desktop_config.json` (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS, `%APPDATA%\Claude\claude_desktop_config.json` on Windows):
 
 ```json
 {
@@ -33,7 +34,7 @@ Add the following to your `claude_desktop_config.json` (`~/Library/Application S
         "/absolute/path/to/hormonaly-public/mcp/hormonaly-mcp-server/dist/index.js"
       ],
       "env": {
-        "HORMONALY_API_URL": "https://hormonaly.ai",
+        "HORMONALY_API_URL": "https://api.hormonaly.ai",
         "HORMONALY_API_KEY": "hk_live_YOUR_PARTNER_API_KEY"
       }
     }
@@ -45,51 +46,29 @@ Restart Claude Desktop after saving.
 
 ## Authentication
 
-### Helix API key (required for helix_* tools)
+Every authenticated tool uses a Hormonaly partner API key.
 
-Get your API key from the [Hormonaly Partner Portal](https://hormonaly.ai/partner/api). Keys start with `hk_live_` and are 72 characters long.
+- **Getting a key:** keys are generated in the Partner Portal. Live keys start with `hk_live_`; sandbox keys start with `hk_test_`.
+- **stdio (Claude Desktop):** set the key in the environment.
 
-Set via environment variable:
+  ```bash
+  export HORMONALY_API_KEY=hk_live_...
+  ```
 
-```bash
-export HORMONALY_API_KEY=hk_live_...
-```
+  Any `helix_*` tool (and `evidence_grade`) also accepts an `api_key` argument that overrides the environment key for that call.
+- **HTTP / SSE (remote):** every request must carry the caller's own key, as `x-api-key: hk_…` or `Authorization: Bearer hk_…`. Requests without a key get `401 authentication_required`; a malformed key gets `401 invalid_api_key`. A key in the server's environment is **never** used by the remote transports.
+- Never paste a key into a shared config file or a public repository. Rotate it in the Partner Portal if it leaks.
 
-Or pass per-call using the `api_key` parameter on any `helix_*` tool.
-
-### Session token (required for user_* tools)
-
-Get your session cookie from your browser after logging into [hormonaly.ai](https://hormonaly.ai):
-
-1. Log into hormonaly.ai
-2. Open DevTools → Application → Cookies
-3. Copy the value of `connect.sid`
-
-```bash
-export HORMONALY_SESSION_TOKEN=s%3A...
-```
-
-Or pass per-call using the `session_token` parameter.
-
-### Admin session token (required for admin_* tools)
-
-Same as session token but for an admin account:
-
-```bash
-export HORMONALY_ADMIN_SESSION_TOKEN=s%3A...
-```
-
-Or pass per-call using the `admin_session_token` parameter.
+Tools marked **None** below call public catalog endpoints and need no key over stdio. Over HTTP/SSE the transport itself still requires a key.
 
 ## Environment Variables
 
 | Variable | Default | Description |
 |---|---|---|
-| `HORMONALY_API_URL` | https://hormonaly.ai | Base URL of the platform |
-| `HORMONALY_API_KEY` | — | Helix B2B API key (hk_live_...) |
-| `HORMONALY_SESSION_TOKEN` | — | User session cookie value |
-| `HORMONALY_ADMIN_SESSION_TOKEN` | — | Admin session cookie value |
-| `HTTP_PORT` | — | Set to run HTTP/SSE transport instead of stdio |
+| `HORMONALY_API_URL` | `https://api.hormonaly.ai` | Base URL of the partner API |
+| `HORMONALY_API_KEY` | — | Partner API key (`hk_live_…` / `hk_test_…`), stdio only |
+| `HTTP_PORT` | — | Set to run the HTTP/SSE transports instead of stdio |
+| `MCP_RATE_LIMIT_PER_MINUTE` | `120` | Per-key request limit on one MCP instance (HTTP/SSE) |
 
 ## HTTP/SSE Transport (for remote agents)
 
@@ -101,25 +80,27 @@ HTTP_PORT=3100 node dist/index.js
 node dist/index.js --http
 ```
 
-Endpoints:
+Endpoints (all except `/health` require `x-api-key`):
 
-- `GET http://localhost:3100/sse` — SSE stream (connect first)
-- `POST http://localhost:3100/messages` — Send tool calls
 - `POST http://localhost:3100/mcp` — Streamable HTTP (MCP spec 2025-12-11, used by Claude.ai)
+- `GET http://localhost:3100/sse` — SSE stream (legacy; connect first)
+- `POST http://localhost:3100/messages` — SSE tool calls (legacy; same key as the `/sse` connection)
 - `GET http://localhost:3100/health` — Health check
+
+Each key is limited per MCP instance (`MCP_RATE_LIMIT_PER_MINUTE`, default 120); over the limit returns `429 rate_limit_exceeded`. The partner API's own per-partner rate limit still applies to every proxied call.
 
 ## Available Tools
 
-24 tools across 6 categories:
+17 tools:
 
 | Tool | Auth | Description |
 |---|---|---|
 | `helix_query` | API key | Clinical question → evidence-graded answer |
-| `helix_compare` | API key (Pro+) | Compare 2–3 compounds head-to-head |
+| `helix_compare` | API key (Advanced/Enterprise) | Compare 2–3 compounds head-to-head |
 | `helix_protocol` | API key | Get all protocols for a compound |
-| `helix_dossier_start` | API key (Pro+) | Start async dossier generation |
+| `helix_dossier_start` | API key (Advanced/Enterprise) | Start async dossier generation |
 | `helix_dossier_status` | API key | Poll dossier job status |
-| `helix_deep_analysis` | API key (Enterprise) | Extended deep analysis |
+| `helix_deep_analysis` | API key | Extended deep analysis (query with three-lens scoring) |
 | `run_clinical_workflow` | API key | Full multi-agent clinical workflow |
 | `protocol_search` | None | Search protocol library |
 | `protocol_get` | None | Get protocol details by ID/slug |
@@ -127,17 +108,10 @@ Endpoints:
 | `protocol_get_interactions` | None | Check compound interactions |
 | `evidence_search` | None | Search PubMed evidence |
 | `evidence_get` | None | Get evidence record by ID |
-| `evidence_grade` | None | GRADE-score evidence records |
+| `evidence_grade` | API key | Stored evidence grade (A–D) for evidence record IDs |
 | `compound_search` | None | Search compound database |
 | `compound_get_interactions` | None | Get compound interactions |
 | `compound_get_dosing` | None | Get evidence-based dosing |
-| `user_get_profile` | Session | Get current user profile |
-| `user_get_usage` | Session | Get AI usage statistics |
-| `user_get_saved_protocols` | Session | Get saved protocols |
-| `monitor_protocol_updates` | Session | Check for stale evidence |
-| `admin_get_stats` | Admin | Platform-wide statistics |
-| `admin_list_users` | Admin | List users |
-| `admin_get_ai_costs` | Admin | AI cost breakdown |
 
 ## Development
 
@@ -149,10 +123,10 @@ npm run build
 npm run clean && npm run build
 
 # Run in stdio mode (for local testing)
-HORMONALY_API_KEY=hk_live_... node dist/index.js
+HORMONALY_API_KEY=hk_test_... node dist/index.js
 
-# Run in HTTP mode
-HTTP_PORT=3100 HORMONALY_API_KEY=hk_live_... node dist/index.js
+# Run in HTTP mode (callers send their own key)
+HTTP_PORT=3100 node dist/index.js
 ```
 
 ---

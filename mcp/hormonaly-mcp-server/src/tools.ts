@@ -2,7 +2,13 @@
  * All MCP tool definitions and handlers for the Hormonaly.ai platform.
  */
 
-import { HoromnalyClient, loadConfig } from "./client.js";
+import { HoromnalyClient } from "./client.js";
+
+/** Shape of POST /api/v1/helix/query as this server reads it (fields read defensively). */
+interface HelixQueryResult {
+  data?: Record<string, any>;
+  usage?: unknown;
+}
 
 // ─── Tool result helpers ────────────────────────────────────────────────────────────────────────────
 
@@ -128,7 +134,7 @@ export const TOOL_DEFINITIONS = [
   // ── Agentic Workflow Tools ─────────────────────────────────────────────────────────────────────────────
   {
     name: "run_clinical_workflow",
-    description: "Run a full multi-agent clinical reasoning workflow on a complex question. This triggers the supervisor/worker pattern: the supervisor decomposes the question, spawns specialized sub-agents (evidence, safety, dosing, regulatory), then synthesizes all findings into a comprehensive clinical report with orchestration_steps[]. Latency: 30–90 seconds. Requires a Helix API key.",
+    description: "Answer a complex clinical question (several compounds, a stack, a patient context) through POST /api/v1/helix/query with clinical detail, citations and three-lens scoring. Returns the answer with agents_used, agent_attributions, orchestration_steps and citations. Requires a Helix API key.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -142,7 +148,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "helix_deep_analysis",
-    description: "Run an extended deep analysis on a clinical topic using the highest-capability model with full RAG pipeline, three-lens scoring, and citation verification. Returns a comprehensive clinical synthesis with evidence grade, confidence score, PMID citations, and three-lens analysis (longevity / health-disease / performance). Use this for research synthesis, systematic review preparation, or comprehensive protocol evaluation. Requires Enterprise Helix API key.",
+    description: "Deep analysis of a clinical topic through POST /api/v1/helix/query with clinical detail, citations and three-lens scoring (longevity / health-disease / performance). Returns the analysis with evidence grade, confidence, citations and related protocols. Requires a Helix API key.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -180,12 +186,12 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "protocol_list_categories",
-    description: "List all protocol categories in the Hormonaly.ai library with protocol counts. No authentication required.",
+    description: "List every protocol category in the Hormonaly.ai library with protocol counts (GET /api/v2/categories). No authentication required.",
     inputSchema: { type: "object" as const, properties: {} },
   },
   {
     name: "protocol_get_interactions",
-    description: "Check for known interactions between a set of compounds. Uses the public interactions endpoint. No authentication required.",
+    description: "List the known interactions recorded for each compound in a set (GET /api/interactions/for/{slug} per compound, combined). No authentication required.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -218,7 +224,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "evidence_grade",
-    description: "Grade a set of evidence records using the GRADE framework. Returns A/B/C/D per study with rationale. Requires a Helix API key.",
+    description: "Fetch the stored evidence grade (A/B/C/D), study type, PMID and summary for a set of evidence record IDs (POST /api/evidence/batch). Requires a Helix API key.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -252,80 +258,11 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "compound_get_dosing",
-    description: "Get evidence-based dosing ranges, administration routes, frequency, and cycle guidance for a compound. Returns the compound record including its dosingRanges, routes, and clinical notes. No authentication required.",
+    description: "Get dosing tables, administration routes and cycle guidance for a compound from its protocol record (GET /api/protocols/{slug}). No authentication required.",
     inputSchema: {
       type: "object" as const,
       properties: { slug: { type: "string", description: "Compound slug (e.g. 'testosterone-cypionate', 'bpc-157')" } },
       required: ["slug"],
-    },
-  },
-  // ── User Tools ──────────────────────────────────────────────────────────────────────────────────────
-  {
-    name: "user_get_profile",
-    description: "Get the current user's profile. Requires session authentication.",
-    inputSchema: {
-      type: "object" as const,
-      properties: { session_token: { type: "string", description: "Session token (overrides HORMONALY_SESSION_TOKEN env var)" } },
-    },
-  },
-  {
-    name: "user_get_usage",
-    description: "Get AI usage statistics for the current user. Requires session authentication.",
-    inputSchema: {
-      type: "object" as const,
-      properties: { session_token: { type: "string", description: "Session token (overrides HORMONALY_SESSION_TOKEN env var)" } },
-    },
-  },
-  {
-    name: "user_get_saved_protocols",
-    description: "Get the list of protocols saved by the current user. Requires session authentication.",
-    inputSchema: {
-      type: "object" as const,
-      properties: { session_token: { type: "string", description: "Session token (overrides HORMONALY_SESSION_TOKEN env var)" } },
-    },
-  },
-  {
-    name: "monitor_protocol_updates",
-    description: "Check saved protocols for stale evidence (>90 days). Returns a review_recommended flag and last evidence update date per protocol. Requires session authentication.",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        session_token: { type: "string", description: "Session token (overrides HORMONALY_SESSION_TOKEN env var)" },
-        compound_filter: { type: "array", items: { type: "string" }, description: "Filter to specific compounds" },
-      },
-    },
-  },
-  // ── Admin Tools ─────────────────────────────────────────────────────────────────────────────────────
-  {
-    name: "admin_get_stats",
-    description: "Get platform-wide statistics (users, protocols, AI costs). Requires admin session.",
-    inputSchema: {
-      type: "object" as const,
-      properties: { admin_session_token: { type: "string", description: "Admin session token (overrides HORMONALY_ADMIN_SESSION_TOKEN env var)" } },
-    },
-  },
-  {
-    name: "admin_list_users",
-    description: "List platform users with optional search and pagination. Requires admin session.",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        limit: { type: "number", default: 20, description: "Number of users per page" },
-        offset: { type: "number", default: 0, description: "Pagination offset" },
-        search: { type: "string", description: "Search by email or name" },
-        admin_session_token: { type: "string", description: "Admin session token (overrides HORMONALY_ADMIN_SESSION_TOKEN env var)" },
-      },
-    },
-  },
-  {
-    name: "admin_get_ai_costs",
-    description: "Get AI cost breakdown by model, endpoint, and time period. Requires admin session.",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        days: { type: "number", default: 30, description: "Number of days to include in the report" },
-        admin_session_token: { type: "string", description: "Admin session token (overrides HORMONALY_ADMIN_SESSION_TOKEN env var)" },
-      },
     },
   },
 ] as const;
@@ -362,7 +299,7 @@ export async function handleTool(
       }
       case "helix_protocol": {
         const effectiveClient = withApiKey(client, args["api_key"] as string | undefined);
-        const result = await effectiveClient.get(`/api/v1/helix/protocols/${args["compound"]}?language=${args["language"] ?? "en"}`, "helix");
+        const result = await effectiveClient.get(`/api/v1/helix/protocols/${encodeURIComponent(String(args["compound"]))}?language=${args["language"] ?? "en"}`, "helix");
         return ok(result);
       }
       case "helix_dossier_start": {
@@ -375,116 +312,132 @@ export async function handleTool(
       }
       case "helix_dossier_status": {
         const effectiveClient = withApiKey(client, args["api_key"] as string | undefined);
-        const result = await effectiveClient.get(`/api/v1/helix/dossier/${args["job_id"]}`, "helix");
+        const result = await effectiveClient.get(`/api/v1/helix/dossier/${encodeURIComponent(String(args["job_id"]))}`, "helix");
         return ok(result);
       }
       case "helix_deep_analysis": {
         const effectiveClient = withApiKey(client, args["api_key"] as string | undefined);
-        const result = await effectiveClient.post("/api/v1/helix/deep-analysis", {
-          topic: args["topic"],
+        // There is no separate deep-analysis route: this is /helix/query with
+        // clinical detail, citations and three-lens scoring.
+        const result = await effectiveClient.post<HelixQueryResult>("/api/v1/helix/query", {
+          question: args["topic"],
           language: args["language"] ?? "en",
+          detail_level: "clinical",
+          include_citations: true,
+          include_three_lens: true,
         }, "helix");
-        return ok(result);
+        return ok({
+          analysis: result?.data?.["answer"],
+          evidence_grade: result?.data?.["grade"],
+          confidence: result?.data?.["confidence"],
+          three_lens: result?.data?.["three_lens"] ?? null,
+          citations: result?.data?.["citations"] ?? [],
+          related_protocols: result?.data?.["related_protocols"] ?? [],
+          usage: result?.usage,
+        });
       }
       case "run_clinical_workflow": {
         const effectiveClient = withApiKey(client, args["api_key"] as string | undefined);
-        const result = await effectiveClient.post("/api/v1/helix/workflow", {
-          question: args["question"],
-          patient_context: args["patient_context"],
+        // There is no separate workflow route: this is /helix/query with the
+        // patient context appended to the question.
+        const question = String(args["question"]);
+        const patientContext = args["patient_context"] as string | undefined;
+        const result = await effectiveClient.post<HelixQueryResult>("/api/v1/helix/query", {
+          question: patientContext ? `${question}\n\nPatient context: ${patientContext}` : question,
           language: args["language"] ?? "en",
+          detail_level: "clinical",
+          include_citations: true,
+          include_three_lens: true,
         }, "helix");
-        return ok(result);
+        return ok({
+          answer: result?.data?.["answer"],
+          evidence_grade: result?.data?.["grade"],
+          confidence: result?.data?.["confidence"],
+          agents_used: result?.data?.["agents_used"] ?? [],
+          agent_attributions: result?.data?.["agent_attributions"] ?? [],
+          orchestration_steps: result?.data?.["orchestration_steps"] ?? [],
+          citations: result?.data?.["citations"] ?? [],
+          three_lens: result?.data?.["three_lens"] ?? null,
+          usage: result?.usage,
+        });
       }
       // ── Protocol ────────────────────────────────────────────────────────────────────────────────────────────────
       case "protocol_search": {
-        const params = new URLSearchParams({ query: String(args["query"]), limit: String(args["limit"] ?? 10) });
+        const params = new URLSearchParams({ q: String(args["query"]), limit: String(Math.min(Number(args["limit"] ?? 10), 20)) });
         if (args["category"]) params.set("category", String(args["category"]));
-        const result = await client.get(`/api/protocols?${params}`, "public");
+        const result = await client.get(`/api/protocols/search?${params}`, "public");
         return ok(result);
       }
       case "protocol_get": {
-        const result = await client.get(`/api/protocols/${args["id"]}`, "public");
+        const result = await client.get(`/api/protocols/${encodeURIComponent(String(args["id"]))}`, "public");
         return ok(result);
       }
       case "protocol_list_categories": {
-        const result = await client.get("/api/categories", "public");
+        const result = await client.get("/api/v2/categories", "public");
         return ok(result);
       }
       case "protocol_get_interactions": {
-        const result = await client.post("/api/interactions/batch", { compounds: args["compounds"] }, "public");
-        return ok(result);
+        // No batch route: one GET per compound, combined.
+        const compounds = ((args["compounds"] as string[]) ?? []).map(String);
+        const perCompound = await Promise.all(
+          compounds.map((slug) => client.get<{ interactions?: unknown[] }>(`/api/interactions/for/${encodeURIComponent(slug)}`, "public")),
+        );
+        return ok({ compounds, interactions: perCompound.flatMap((r) => r?.interactions ?? []) });
       }
       // ── Evidence ────────────────────────────────────────────────────────────────────────────────────────────────
       case "evidence_search": {
-        const params = new URLSearchParams({ compound: String(args["compound"]), max_results: String(args["max_results"] ?? 10) });
-        const result = await client.get(`/api/evidence?${params}`, "public");
+        const params = new URLSearchParams({ peptide: String(args["compound"]), maxResults: String(args["max_results"] ?? 10) });
+        const result = await client.get(`/api/pubmed/search?${params}`, "public");
         return ok(result);
       }
       case "evidence_get": {
-        const result = await client.get(`/api/evidence/${args["id"]}`, "public");
+        const result = await client.get(`/api/evidence/${encodeURIComponent(String(args["id"]))}`, "public");
         return ok(result);
       }
       case "evidence_grade": {
         const effectiveClient = withApiKey(client, args["api_key"] as string | undefined);
-        const result = await effectiveClient.post("/api/v1/evidence/grade", { ids: args["ids"] }, "helix");
-        return ok(result);
+        // Stored grades via POST /api/evidence/batch. Sent with the API key so
+        // the POST is accepted from a server (no browser cookie, no CSRF token).
+        const result = await effectiveClient.post<unknown>("/api/evidence/batch", { ids: args["ids"] }, "helix");
+        const records: any[] = Array.isArray(result) ? result : ((result as any)?.evidence ?? []);
+        return ok({
+          count: records.length,
+          evidence: records.map((e) => ({
+            id: e.id,
+            title: e.title ?? e.name ?? null,
+            pmid: e.pmid ?? e.pubmedId ?? null,
+            study_type: e.studyType ?? e.study_type ?? null,
+            grade: e.gradeRating ?? e.grade ?? null,
+            confidence: e.confidenceLevel ?? e.confidence ?? null,
+            summary: e.summary ?? e.clinicalRelevance ?? null,
+          })),
+        });
       }
       // ── Compound ────────────────────────────────────────────────────────────────────────────────────────────────
       case "compound_search": {
-        const params = new URLSearchParams({ query: String(args["query"]) });
+        const params = new URLSearchParams({ search: String(args["query"]) });
         if (args["category"]) params.set("category", String(args["category"]));
         const result = await client.get(`/api/compounds?${params}`, "public");
         return ok(result);
       }
       case "compound_get_interactions": {
-        const result = await client.get(`/api/interactions/for/${args["slug"]}`, "public");
+        const result = await client.get(`/api/interactions/for/${encodeURIComponent(String(args["slug"]))}`, "public");
         return ok(result);
       }
       case "compound_get_dosing": {
-        const result = await client.get(`/api/compounds/${args["slug"]}`, "public");
-        return ok(result);
-      }
-      // ── User ────────────────────────────────────────────────────────────────────────────────────────────────────────
-      case "user_get_profile": {
-        const effectiveClient = withSessionToken(client, args["session_token"] as string | undefined);
-        const result = await effectiveClient.get("/api/user/profile", "session");
-        return ok(result);
-      }
-      case "user_get_usage": {
-        const effectiveClient = withSessionToken(client, args["session_token"] as string | undefined);
-        const result = await effectiveClient.get("/api/user/usage", "session");
-        return ok(result);
-      }
-      case "user_get_saved_protocols": {
-        const effectiveClient = withSessionToken(client, args["session_token"] as string | undefined);
-        const result = await effectiveClient.get("/api/user/saved-protocols", "session");
-        return ok(result);
-      }
-      case "monitor_protocol_updates": {
-        const effectiveClient = withSessionToken(client, args["session_token"] as string | undefined);
-        const result = await effectiveClient.get("/api/user/protocol-updates", "session");
-        return ok(result);
-      }
-      // ── Admin ───────────────────────────────────────────────────────────────────────────────────────────────────────
-      case "admin_get_stats": {
-        const effectiveClient = withAdminToken(client, args["admin_session_token"] as string | undefined);
-        const result = await effectiveClient.get("/api/admin/stats", "admin");
-        return ok(result);
-      }
-      case "admin_list_users": {
-        const effectiveClient = withAdminToken(client, args["admin_session_token"] as string | undefined);
-        const params = new URLSearchParams({
-          limit: String(args["limit"] ?? 20),
-          offset: String(args["offset"] ?? 0),
+        // Dosing lives on the protocol record.
+        const protocol = await client.get<any>(`/api/protocols/${encodeURIComponent(String(args["slug"]))}`, "public");
+        if (!protocol) return err(`No protocol found for compound: ${args["slug"]}`);
+        return ok({
+          compound: protocol.title ?? protocol.name ?? args["slug"],
+          slug: protocol.slug ?? args["slug"],
+          evidence_grade: protocol.gradeRating ?? protocol.evidenceGrade ?? null,
+          dosing_table: protocol.dosingTable ?? protocol.dosing?.table ?? [],
+          dosing_notes: protocol.dosingNotes ?? protocol.dosing?.notes ?? [],
+          administration_routes: protocol.administrationRoutes ?? null,
+          cycle_guidance: protocol.cycleGuidance ?? null,
+          fda_status: protocol.fdaStatus ?? null,
         });
-        if (args["search"]) params.set("search", String(args["search"]));
-        const result = await effectiveClient.get(`/api/admin/users?${params}`, "admin");
-        return ok(result);
-      }
-      case "admin_get_ai_costs": {
-        const effectiveClient = withAdminToken(client, args["admin_session_token"] as string | undefined);
-        const result = await effectiveClient.get(`/api/admin/ai-costs?days=${args["days"] ?? 30}`, "admin");
-        return ok(result);
       }
       default:
         return err(`Unknown tool: ${name}`);
@@ -499,15 +452,5 @@ export async function handleTool(
 
 function withApiKey(base: HoromnalyClient, apiKey: string | undefined): HoromnalyClient {
   if (!apiKey) return base;
-  return new HoromnalyClient(loadConfig({ apiUrl: base.apiUrl, helixApiKey: apiKey }));
-}
-
-function withSessionToken(base: HoromnalyClient, token: string | undefined): HoromnalyClient {
-  if (!token) return base;
-  return new HoromnalyClient(loadConfig({ apiUrl: base.apiUrl, sessionToken: token }));
-}
-
-function withAdminToken(base: HoromnalyClient, token: string | undefined): HoromnalyClient {
-  if (!token) return base;
-  return new HoromnalyClient(loadConfig({ apiUrl: base.apiUrl, adminSessionToken: token }));
+  return base.with({ helixApiKey: apiKey });
 }

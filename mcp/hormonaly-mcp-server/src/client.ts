@@ -1,14 +1,16 @@
-—/**
- * Hormonaly API HTTP client
- * Handles authentication and request routing for all API endpoints.
+/**
+ * Hormonaly API HTTP client.
+ *
+ * Authenticates with a partner API key only (`Authorization: Bearer hk_...`).
+ * There is no session-cookie mode: never copy a browser cookie into this server.
  */
 
 export interface HoromnalyConfig {
   apiUrl: string;
   helixApiKey?: string;
-  sessionToken?: string;
-  adminSessionToken?: string;
 }
+
+export type AuthMode = "helix" | "public";
 
 export class HoromnalyClient {
   private config: HoromnalyConfig;
@@ -21,7 +23,16 @@ export class HoromnalyClient {
     this.config = config;
   }
 
-  async fetch(path: string, options: RequestInit = {}, authMode: "helix" | "session" | "admin" | "public" = "public"): Promise<Response> {
+  /**
+   * A client with one setting replaced and everything else carried over.
+   * Never re-reads the environment, so a per-request client built from a
+   * caller's key cannot pick up a key set on the host.
+   */
+  with(overrides: Partial<HoromnalyConfig>): HoromnalyClient {
+    return new HoromnalyClient({ ...this.config, ...overrides });
+  }
+
+  async fetch(path: string, options: RequestInit = {}, authMode: AuthMode = "public"): Promise<Response> {
     const url = `${this.config.apiUrl}${path}`;
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -29,16 +40,11 @@ export class HoromnalyClient {
     };
     if (authMode === "helix" && this.config.helixApiKey) {
       headers["Authorization"] = `Bearer ${this.config.helixApiKey}`;
-    } else if (authMode === "session" && this.config.sessionToken) {
-      headers["Cookie"] = `connect.sid=${this.config.sessionToken}`;
-    } else if (authMode === "admin" && this.config.adminSessionToken) {
-      headers["Cookie"] = `connect.sid=${this.config.adminSessionToken}`;
     }
-    const res = await fetch(url, { ...options, headers });
-    return res;
+    return fetch(url, { ...options, headers });
   }
 
-  async get<T = unknown>(path: string, authMode: "helix" | "session" | "admin" | "public" = "public"): Promise<T> {
+  async get<T = unknown>(path: string, authMode: AuthMode = "public"): Promise<T> {
     const res = await this.fetch(path, {}, authMode);
     if (!res.ok) {
       const body = await res.text().catch(() => "");
@@ -47,7 +53,7 @@ export class HoromnalyClient {
     return res.json() as Promise<T>;
   }
 
-  async post<T = unknown>(path: string, body: unknown, authMode: "helix" | "session" | "admin" | "public" = "public"): Promise<T> {
+  async post<T = unknown>(path: string, body: unknown, authMode: AuthMode = "public"): Promise<T> {
     const res = await this.fetch(path, { method: "POST", body: JSON.stringify(body) }, authMode);
     if (!res.ok) {
       const errBody = await res.text().catch(() => "");
@@ -57,13 +63,13 @@ export class HoromnalyClient {
   }
 }
 
-/** Load config from environment variables */
+/** Load config from environment variables. */
 export function loadConfig(overrides: Partial<HoromnalyConfig> = {}): HoromnalyConfig {
   return {
-    apiUrl: overrides.apiUrl ?? process.env["HORMONALY_API_URL"] ?? "https://hormonaly.ai",
+    // api.hormonaly.ai is the partner API host; hormonaly.ai is the website,
+    // behind Cloudflare bot protection, and can answer server calls with 403.
+    apiUrl: overrides.apiUrl ?? process.env["HORMONALY_API_URL"] ?? "https://api.hormonaly.ai",
     helixApiKey: overrides.helixApiKey ?? process.env["HORMONALY_API_KEY"],
-    sessionToken: overrides.sessionToken ?? process.env["HORMONALY_SESSION_TOKEN"],
-    adminSessionToken: overrides.adminSessionToken ?? process.env["HORMONALY_ADMIN_SESSION_TOKEN"],
     ...overrides,
   };
 }
