@@ -2,9 +2,8 @@
 
 > **The AI-native infrastructure for peptide, hormone, and longevity medicine.**
 
-[![Status](https://img.shields.io/badge/status-status.hormonaly.ai-brightgreen)](https://status.hormonaly.ai)
-[![OpenAPI](https://img.shields.io/badge/OpenAPI-spec-blue)](https://hormonaly.ai/api/v1/helix/openapi.json)
-[![MCP Server](https://img.shields.io/badge/MCP-24%20tools-purple)](#mcp-server--tool-schema)
+[![OpenAPI](https://img.shields.io/badge/OpenAPI-spec-blue)](https://api.hormonaly.ai/openapi.json)
+[![MCP Server](https://img.shields.io/badge/MCP-17%20tools-purple)](#mcp-server--tool-schema)
 [![Hormonaly-1](https://img.shields.io/badge/Hormonaly--1-Live%20Jun%202026-orange)](#hormonaly-1-llm)
 
 This repository is the public-facing integration reference for enterprise partners and API integrators. The MCP server source is published in this repository at [Hormonaly-ai/hormonaly-public](https://github.com/Hormonaly-ai/hormonaly-public). For clinical access, visit [hormonaly.ai](https://hormonaly.ai).
@@ -59,7 +58,7 @@ Core products available via API:
 | Scribe | SOAP/DAP/Narrative clinical note generator with citation grounding |
 | PharmacyOS | Compounding-pharmacy intelligence — protocols, interactions, Rx generation |
 | Workspace | Full multi-panel clinical suite — enterprise/partner access |
-| MCP Server | @hormonaly/mcp-server — 24 tools for Claude Desktop and agent frameworks |
+| MCP Server | @hormonaly/mcp-server — 17 tools for Claude Desktop and agent frameworks |
 
 ## Architecture Overview
 
@@ -145,101 +144,110 @@ Streaming SSE response → client
 
 ## Partner API Reference
 
-Base URL: `https://hormonaly.ai/api/v1`
+Base URL: `https://api.hormonaly.ai/api/v1`
 
-Auth: `Authorization: Bearer YOUR_API_KEY` on every request.
+Call `api.hormonaly.ai` from your servers. `hormonaly.ai` is the website: it sits behind Cloudflare bot protection, which can answer a server-to-server request with a 403 HTML page before it reaches the API.
 
-Machine-readable OpenAPI spec: `GET /api/v1/helix/openapi.json`
+Auth: `Authorization: Bearer hk_live_...` on every authenticated request.
 
-All endpoint paths below are relative to the base URL.
+Machine-readable OpenAPI 3.1 spec: `GET https://api.hormonaly.ai/openapi.json`. The spec and the [API docs](https://hormonaly.ai/api-docs) are the source of truth; this README is a summary.
+
+All endpoint paths below are relative to the base URL. Request bodies are JSON (`Content-Type: application/json`); anything else gets 415.
 
 ### Helix Endpoints
 
 #### POST /helix/query
 
-Submit a clinical question and receive a full Helix response with evidence grade, citations, and clinical verdict.
+Submit a clinical question and receive an evidence-graded answer with citations.
 
 Request:
 
 ```json
 {
-  "query": "What is the evidence for BPC-157 in tendon repair?",
-  "mode": "evidence",
-  "stream": true
+  "question": "What is the evidence for BPC-157 in tendon repair?",
+  "include_citations": true,
+  "detail_level": "clinical"
 }
 ```
 
-Response (streaming SSE):
+Main fields: `question` (required, up to 10,000 characters), `language` (`en` or `ar`; when omitted, a question written mostly in Arabic is answered in Arabic), `detail_level` (`clinical` or `summary`), `include_citations`, `include_three_lens`, `verbosity` (`concise` default, or `standard`), `patient_context`, `history`, `partner_formulary` (up to 500 entries) and `on_formulary_only`. See the OpenAPI spec for every field.
+
+Buffered response (abridged):
+
+```json
+{
+  "success": true,
+  "data": {
+    "answer": "...",
+    "grade": "C",
+    "confidence": { "score": 62, "level": "medium", "factors": ["..."] },
+    "citations": [ { "id": 1, "pmid": "...", "title": "...", "year": 2021, "evidence_level": "..." } ],
+    "related_protocols": [ { "id": "bpc-157-recovery", "title": "...", "grade": "C" } ]
+  },
+  "usage": { "tokens": 14746, "latency_ms": 25000, "cache": "MISS" }
+}
+```
+
+- `grade` is the A–D evidence grade (null when the evidence is insufficient).
+- `confidence.score` is an integer 0–100; `level` is one of `high`, `medium-high`, `medium`, `low-medium`, `low`.
+- A repeated question can be served from cache: `usage.cache` is `"HIT"`, `usage.tokens` is 0 (not billed) and `usage.original_tokens` is the original generation's count.
+- `Idempotency-Key` (1–255 characters of letters, digits, `_ - . :`; a UUID works) makes a retry return the original response without re-billing. Reusing a key with a different body returns 422.
+
+Streaming: send `Accept: text/event-stream` (or `"stream": true`). The response uses named SSE events, for example:
 
 ```
-data: {"type":"agent_step","step":"classifying intent"}
-data: {"type":"agent_step","step":"searching evidence","sources":26}
-data: {"type":"agent_step","step":"verifying citations"}
-data: {"type":"content","text":"BPC-157 has demonstrated..."}
-data: {"type":"metadata","evidence_grade":"C","confidence":62,"verdict":"CONSIDER","citations":5,"sources_consulted":26}
-data: {"type":"done"}
+event: stage
+data: {"stage":"classifying"}
+
+event: content
+data: {"content":"BPC-157 has demonstrated..."}
+
+event: done
+data: {"grade":"C","confidence":{"score":62,"level":"medium"},"citations":[...],"usage":{"tokens":16569}}
 ```
 
-Response metadata fields:
+Other events include `agent`, `sources`, `heartbeat` and `content_replace` (the final text replacing the streamed draft). See the API docs for the full event list.
 
-| Field | Type | Description |
-|---|---|---|
-| evidence_grade | "A" | "B" | "C" | "D" | GRADE rating — A = strong RCTs, D = expert opinion/preclinical |
-| confidence | 0–100 | Composite score from GRADE, citation density, human vs preclinical, inter-source agreement |
-| citations | number | Verified PubMed citations included in response |
-| sources_consulted | number | RAG chunks retrieved from evidence database |
-| agent_type | string | Which specialist agent handled the query |
-| verdict | "ADOPT" | "CONSIDER" | "WATCH_AND_WAIT" | "AVOID" | "INSUFFICIENT_DATA" | Overall clinical verdict |
-| usage | object | Current token usage toward monthly budget |
+Typical latency: a buffered clinical answer takes about 20–35 seconds; streaming shows the first text within a few seconds. Set your client timeout to at least 100 seconds for buffered calls, or use streaming or async jobs (`POST /helix/jobs`).
 
 #### GET /helix/protocols/:compound
 
-Look up evidence-quality-rated protocols for a specific compound.
+Look up the protocols for a compound.
 
 Example: `GET /helix/protocols/bpc-157`
 
-Response:
-
-```json
-{
-  "compound": "bpc-157",
-  "evidence_grade": "C",
-  "protocols": [
-    {
-      "indication": "Tendon repair",
-      "dose_range": "200–500 mcg/day",
-      "route": ["subcutaneous", "intramuscular"],
-      "cycle_duration": "4–12 weeks",
-      "monitoring": ["liver enzymes at baseline", "symptom review at 4 weeks"]
-    }
-  ],
-  "interactions": [],
-  "citations": 5
-}
-```
+Returns the compound's protocols with titles, evidence grades, regulatory status and summaries, plus `protocol_count`. Unknown compounds return 404.
 
 #### POST /helix/dossier
 
-Generate a comprehensive evidence dossier for a compound (async job). Advanced or Enterprise tier required.
+Generate an evidence dossier for a compound (async job). Advanced or Enterprise tier.
 
 Request:
 
 ```json
-{ "compound": "semaglutide", "sections": ["mechanism", "efficacy", "safety", "dosing"] }
+{ "compound": "semaglutide", "language": "en" }
 ```
 
-Response: `{ "job_id": "dossier_abc123", "status": "queued" }`
+Response: `{ "success": true, "data": { "job_id": "dossier_...", "status": "processing", "poll_url": "..." } }`
 
-Poll with `GET /helix/dossier/:job_id` until `status: "complete"`.
+Poll `GET /helix/dossier/:job_id` until `status` is `completed` (or `failed`). The completed result carries `title`, `executive_summary`, `citations`, `grade` (A–D or null), `recommendation` (the verdict), `confidence` (0–100) and `pdf_url`.
 
 #### POST /helix/compare
 
-Compare 2–3 protocols head-to-head across evidence grade, safety, dosing, and clinical readiness. Advanced or Enterprise tier required.
+Compare 2–3 compounds head-to-head. Advanced or Enterprise tier.
 
 Request:
 
 ```json
-{ "compounds": ["testosterone-cypionate", "testosterone-enanthate"] }
+{ "compounds": ["testosterone-cypionate", "testosterone-enanthate"], "indication": "Hypogonadism" }
+```
+
+#### POST /helix/jobs
+
+Run a query (`"type": "query"`) or a scribe note (`"type": "scribe"`) asynchronously. Returns 202 with a `job_id`; poll `GET /helix/jobs/:job_id` until `status` is `done` or `failed`.
+
+```json
+{ "type": "query", "payload": { "question": "What is the evidence for metformin in PCOS?" } }
 ```
 
 #### GET /helix/health
@@ -247,14 +255,16 @@ Request:
 Service health check. No authentication required.
 
 ```json
-{ "status": "ok", "latency_p50_ms": 4200, "citation_coverage": "99%" }
+{ "status": "ok" }
 ```
+
+---
 
 ## MCP Server — Tool Schema
 
 Package: `@hormonaly/mcp-server`
 
-The Hormonaly MCP server exposes 24 tools that allow Claude Desktop, Cursor, or any MCP-compatible agent to query the full Helix clinical intelligence stack directly — with no HTTP client code required on your side.
+The Hormonaly MCP server exposes 17 tools that allow Claude Desktop, Cursor, or any MCP-compatible agent to query the full Helix clinical intelligence stack directly — with no HTTP client code required on your side.
 
 ### Installation (Claude Desktop)
 
@@ -276,8 +286,8 @@ Then configure Claude Desktop as follows:
       "command": "node",
       "args": ["/path/to/hormonaly-mcp-server/dist/index.js"],
       "env": {
-        "HORMONALY_API_URL": "https://hormonaly.ai",
-        "HORMONALY_API_KEY": "YOUR_API_KEY"
+        "HORMONALY_API_URL": "https://api.hormonaly.ai",
+        "HORMONALY_API_KEY": "hk_live_YOUR_PARTNER_API_KEY"
       }
     }
   }
@@ -286,13 +296,14 @@ Then configure Claude Desktop as follows:
 
 Restart Claude Desktop — tools appear immediately.
 
-HTTP/SSE mode (for server-side agents):
+HTTP/SSE mode (for server-side agents). Every request must carry the caller's own partner key as `x-api-key: hk_…` (or `Authorization: Bearer hk_…`); a key in the server's environment is never used remotely:
 
 ```bash
 HTTP_PORT=3100 node dist/index.js
-# SSE: GET http://localhost:3100/sse?sessionId=YOUR_ID
-# POST: POST http://localhost:3100/messages?sessionId=YOUR_ID
-# Health: GET http://localhost:3100/health
+# Streamable HTTP: POST http://localhost:3100/mcp        (x-api-key required)
+# SSE (legacy):    GET  http://localhost:3100/sse        (x-api-key required)
+#                  POST http://localhost:3100/messages   (same key as the /sse connection)
+# Health:          GET  http://localhost:3100/health
 ```
 
 See the `mcp/README.md` for full setup instructions.
@@ -314,19 +325,17 @@ The Hormonaly MCP server is deployed as a remote HTTP/SSE server and listed on t
 
 1. Claude.ai discovers Hormonaly via the MCP Registry — no manual URL entry needed
 2. User clicks Connect — Claude prompts: "Enter your x-api-key"
-3. User pastes their `hk_live_...` Partner API key (from Partner Portal → API Keys)
-4. All 24 tools activate immediately in the conversation
+3. User pastes their `hk_live_...` Partner API key (generated in the Partner Portal → API Keys)
+4. All 17 tools activate immediately in the conversation
 
 ### Authentication & Access Tiers
 
 | Tool group | Auth required | Examples |
 |---|---|---|
-| Protocol, Evidence, Compound tools (9 tools) | None — public read access | protocol_search, compound_get_dosing (evidence_grade requires an API key) |
-| Helix & agentic tools (8 tools) | API key required | helix_query, run_clinical_workflow, helix_deep_analysis, evidence_grade |
-| User tools (4 tools) | Session token | user_get_profile, monitor_protocol_updates |
-| Admin tools (3 tools) | Admin session | admin_get_stats, admin_list_users |
+| Protocol, Evidence, Compound tools (9 tools) | None — public read access over stdio | protocol_search, compound_get_dosing |
+| Helix & agentic tools, plus evidence_grade (8 tools) | Partner API key | helix_query, run_clinical_workflow, helix_deep_analysis, evidence_grade |
 
-Partner API keys start with `hk_live_` and are issued from the Partner Portal. The key is passed as the `x-api-key` SSE header — Claude.ai will prompt for it on first connect.
+The MCP server authenticates with a partner API key only; there are no session-cookie or admin tools. Partner API keys start with `hk_live_` (`hk_test_` for sandbox) and are generated in the Partner Portal. Over the remote HTTP/SSE transports every request needs the key in the `x-api-key` header, public tools included — Claude.ai will prompt for it on first connect.
 
 ### Full Tool Schema
 
@@ -349,7 +358,7 @@ Partner API keys start with `hk_live_` and are issued from the Partner Portal. T
 | protocol_search | Search protocol library by compound, category, or condition | Public (no auth) |
 | protocol_get | Get full protocol details by ID or slug | Public (no auth) |
 | protocol_list_categories | List all 31+ protocol categories with counts | Public (no auth) |
-| protocol_get_interactions | Check interactions between a set of compounds (batch endpoint requires session auth) | Session |
+| protocol_get_interactions | Check interactions between a set of compounds | Public (no auth) |
 
 #### Evidence Tools
 
@@ -367,36 +376,17 @@ Partner API keys start with `hk_live_` and are issued from the Partner Portal. T
 | compound_get_interactions | Get all known interactions for a compound slug | Public (no auth) |
 | compound_get_dosing | Get evidence-based dosing ranges, routes, and cycle guidance | Public (no auth) |
 
-#### User Tools (session auth required)
-
-| Tool | Description |
-|---|---|
-| user_get_profile | Get current user's profile |
-| user_get_usage | Get AI usage stats for current user |
-| user_get_saved_protocols | Get protocols saved by current user |
-| monitor_protocol_updates | Check saved protocols for stale evidence (>90 days); returns review_recommended flag |
-
-#### Admin Tools (admin session required)
-
-| Tool | Description |
-|---|---|
-| admin_get_stats | Get platform-wide statistics |
-| admin_list_users | List users with optional search and pagination |
-| admin_get_ai_costs | Get AI cost breakdown by model and endpoint |
-
 #### Agentic Workflow Tools
 
-Three tools activate the full multi-agent pipeline:
+Two tools activate the full multi-agent pipeline:
 
 **run_clinical_workflow** — Supervisor/worker pattern. Decomposes complex clinical questions into 3–4 parallel sub-tasks (evidence search, interaction check, protocol lookup, clinical synthesis), dispatches specialist agents, and returns a synthesized report with `orchestration_steps[]` showing each agent's task, result, timing, and confidence. Latency: 30–90 seconds for complex queries.
 
 **helix_deep_analysis** — Extended deep analysis using the full RAG pipeline. Returns Three-Lens scoring across three independent clinical lenses (Longevity / Health & Disease / Performance), full PMID citation list, confidence breakdown by section, and overall evidence grade (A–D).
 
-**monitor_protocol_updates** — Checks saved protocols against a 90-day staleness threshold. Returns a `review_recommended` flag and last evidence update date per protocol. Use weekly/monthly to stay current with the literature.
-
 ### MCP Tool Input Schemas
 
-All 24 tool schemas. The `inputSchema` block is what Claude Desktop and MCP clients use to validate parameters before sending.
+All 17 tool schemas. The `inputSchema` block is what Claude Desktop and MCP clients use to validate parameters before sending.
 
 #### helix_query
 
@@ -486,7 +476,7 @@ All 24 tool schemas. The `inputSchema` block is what Claude Desktop and MCP clie
 }
 ```
 
-#### helix_deep_analysis (Enterprise)
+#### helix_deep_analysis
 
 ```json
 {
@@ -517,21 +507,6 @@ All 24 tool schemas. The `inputSchema` block is what Claude Desktop and MCP clie
       "api_key": { "type": "string" }
     },
     "required": ["question"]
-  }
-}
-```
-
-#### monitor_protocol_updates (session auth)
-
-```json
-{
-  "name": "monitor_protocol_updates",
-  "inputSchema": {
-    "type": "object",
-    "properties": {
-      "session_token": { "type": "string" },
-      "compound_filter": { "type": "array", "items": { "type": "string" }, "description": "Filter to specific compounds" }
-    }
   }
 }
 ```
@@ -679,97 +654,15 @@ All 24 tool schemas. The `inputSchema` block is what Claude Desktop and MCP clie
 }
 ```
 
-#### user_get_profile
-
-```json
-{
-  "name": "user_get_profile",
-  "inputSchema": {
-    "type": "object",
-    "properties": { "session_token": { "type": "string" } }
-  }
-}
-```
-
-#### user_get_usage
-
-```json
-{
-  "name": "user_get_usage",
-  "inputSchema": {
-    "type": "object",
-    "properties": { "session_token": { "type": "string" } }
-  }
-}
-```
-
-#### user_get_saved_protocols
-
-```json
-{
-  "name": "user_get_saved_protocols",
-  "inputSchema": {
-    "type": "object",
-    "properties": { "session_token": { "type": "string" } }
-  }
-}
-```
-
-#### admin_get_stats
-
-```json
-{
-  "name": "admin_get_stats",
-  "inputSchema": {
-    "type": "object",
-    "properties": { "admin_session_token": { "type": "string" } }
-  }
-}
-```
-
-#### admin_list_users
-
-```json
-{
-  "name": "admin_list_users",
-  "inputSchema": {
-    "type": "object",
-    "properties": {
-      "limit": { "type": "number", "default": 20 },
-      "offset": { "type": "number", "default": 0 },
-      "search": { "type": "string" },
-      "admin_session_token": { "type": "string" }
-    }
-  }
-}
-```
-
-#### admin_get_ai_costs
-
-```json
-{
-  "name": "admin_get_ai_costs",
-  "inputSchema": {
-    "type": "object",
-    "properties": {
-      "days": { "type": "number", "default": 30 },
-      "admin_session_token": { "type": "string" }
-    }
-  }
-}
-```
-
 ## Authentication
 
 Hormonaly uses two independent auth systems — do not mix them:
 
 ### 1. Helix Data API — Bearer Token
 
-All `/api/v1/*` endpoints require: `Authorization: Bearer YOUR_API_KEY`
+All authenticated `/api/v1/*` endpoints require: `Authorization: Bearer hk_live_...`
 
-API keys are SHA-256 hashed before storage. The plaintext key is shown exactly once at creation — store it immediately in your secrets manager. If lost, revoke and rotate; there is no recovery path. REST `/api/v1/*` endpoints expect the key in the `Authorization: Bearer` header; the remote MCP/SSE server expects it in the `x-api-key: hk_live_...` header.
-
-Key management: Partner Portal → API Keys (`/partner/api`)
+API keys are generated in the Partner Portal (API & Usage → API Keys, `/partner/api`). Live keys start with `hk_live_`, sandbox keys with `hk_test_`. Keys are SHA-256 hashed before storage. The plaintext key is shown exactly once, when it is generated — store it immediately in your secrets manager. If lost, revoke and generate a new one; there is no recovery path. REST `/api/v1/*` endpoints expect the key in the `Authorization: Bearer` header; the remote MCP server expects it in the `x-api-key: hk_live_...` header.
 
 ### 2. Partner Portal — Session Auth
 
@@ -777,74 +670,90 @@ The Partner Portal (`/partner/*`) uses session-based authentication. Log in at `
 
 ### Key Lifecycle
 
-1. **Create** — Full key shown ONCE in modal; copy immediately.
+1. **Generate** — In the Partner Portal. The full key is shown ONCE; copy it immediately.
 2. **Multiple active keys** — Creating a new key does NOT revoke existing keys.
 3. **Revoke** — Instant. Any request using that key returns 401 immediately.
-4. **Lost key** — Revoke and create a new key. No plaintext recovery.
+4. **Lost key** — Revoke it and generate a new key in the Partner Portal. No plaintext recovery.
 
 ## Rate Limits & Quotas
 
 | Plan | Monthly Base | Tokens Included | Rate Limit | Overage Rate | Hard Cap |
 |---|---|---|---|---|---|
-| API Starter | $499 | 5M tokens | 60 req/min | $100 / 1M | 10M tokens (then 429) |
-| API Advanced | $1,999 | 25M tokens | 150 req/min | $80 / 1M | 75M tokens (then 429) |
-| API Enterprise | $4,999 | 75M tokens | Custom | $25 / 1M | None (overage billed) |
-| Legacy partners (pre-billing) | — | — | 20 req/min | — | — |
+| API Starter | $499 | 5M tokens | Per partner (default 60 req/min) | $100 / 1M | 10M tokens (then 429) |
+| API Advanced | $1,999 | 25M tokens | Per partner (default 60 req/min) | $80 / 1M | 75M tokens (then 429) |
+| API Enterprise | $4,999 | 75M tokens | Per partner (default 60 req/min) | $25 / 1M | None (overage billed) |
 
-Over-limit response: HTTP 429 with `Retry-After` header. Burst behavior: sliding 60-second window, no burst allowance.
+Rate limits are **per partner** (all of a partner's keys share one limit), **default 60 requests per minute**, counted in a **fixed** 60-second window. Your account's limit is returned on every authenticated response in `X-RateLimit-Limit`, with `X-RateLimit-Remaining` and `X-RateLimit-Reset` (Unix seconds). Over the limit: HTTP 429 `rate_limit_exceeded` with a `Retry-After` header. The monthly token cap is the tighter of your account's cap and the plan's hard cap; past it, live keys get 429 `monthly_budget_exceeded` until the 1st.
 
 ### Response Latency
 
 | Endpoint | P50 latency |
 |---|---|
-| POST /api/v1/helix/query | 3–12 seconds |
+| POST /api/v1/helix/query | 20–35 seconds buffered (clinical); first streamed text within a few seconds |
 | POST /api/v1/scribe/generate | 15–45 seconds |
 | GET /api/v1/helix/protocols/:compound | < 200ms |
 | run_clinical_workflow (MCP) | 30–90 seconds |
 
 ### usage Object
 
-Every `POST /api/v1/helix/query` response includes a top-level `usage` object reflecting real-time token consumption:
+Every `POST /api/v1/helix/query` response includes a `usage` object for that request:
 
 ```json
 {
   "usage": {
-    "tokensUsedThisMonth": 1234567,
-    "monthlyTokenBudget": 5000000,
-    "percentUsed": 24.7,
-    "hardCapTokens": 10000000,
-    "hardCapExceeded": false,
-    "quotaThresholdsCrossed": [80]
+    "tokens": 14746,
+    "latency_ms": 25000,
+    "cache": "MISS"
   }
 }
 ```
+
+- `tokens` — tokens billed for this request. 0 for a cache hit (`"cache": "HIT"`) and for a refused request.
+- `original_tokens` — cache hits only: tokens the original generation used (not billed again).
+- `latency_ms` — server-side latency.
+
+Month-to-date totals: `GET /api/v1/helix/usage`.
 
 ## Errors & Status Codes
 
+Errors use the standard envelope with a lowercase, machine-readable `error` code:
+
 ```json
 {
-  "error": {
-    "code": "RATE_LIMITED",
-    "message": "Request rate exceeded. Retry after 23s.",
-    "request_id": "req_01HXYZ..."
-  }
+  "success": false,
+  "error": "rate_limit_exceeded",
+  "message": "Rate limit exceeded. Maximum 60 requests per minute. Retry after 12 seconds."
 }
 ```
 
-| Status | error.code | Meaning | Recommended client behavior |
+Authentication, budget and rate-limit rejections from the middleware carry `error` and `message` without the `success` key. Some errors add fields such as `retryAfter`, `budget` and `used`.
+
+| Status | error | Meaning | Recommended client behavior |
 |---|---|---|---|
-| 400 | INVALID_REQUEST | Malformed JSON or missing required field | Fix the request; do not retry as-is |
-| 401 | MISSING_AUTH | No Authorization header | Attach Authorization: Bearer YOUR_API_KEY |
-| 401 | INVALID_KEY | Key not recognized or revoked | Rotate the key via Partner Portal |
-| 403 | TIER_REQUIRED | Endpoint requires Advanced or Enterprise tier | Upgrade plan |
-| 404 | NOT_FOUND | Compound, protocol, or job ID does not exist | Verify identifier |
-| 422 | VALIDATION_FAILED | Semantic validation failed | Inspect error.message |
-| 429 | RATE_LIMITED | Per-minute request rate exceeded | Honor the Retry-After header |
-| 429 | BUDGET_EXCEEDED | Pre-call budget cap exceeded | Wait for budget window or contact billing |
-| 5xx | INTERNAL_ERROR | Unexpected server error | Retry with exponential backoff (max 3 attempts) |
-| 503 | UPSTREAM_TIMEOUT | A biomedical database or model upstream timed out | Retry after 5–10s |
+| 400 | validation_error | Malformed request or missing/invalid field | Fix the request; do not retry as-is |
+| 400 | invalid_idempotency_key | `Idempotency-Key` not 1–255 characters of letters, digits, `_ - . :` | Send a valid key (a UUID works); nothing was processed or billed |
+| 400 | prompt_injection | Instruction-like or role-changing text in a free-text field | Remove it and retry |
+| 401 | authentication_required | No `Authorization` header | Send `Authorization: Bearer hk_live_...` |
+| 401 | invalid_api_key | Key not recognized or revoked | Generate a new key in the Partner Portal |
+| 403 | tier_insufficient | Endpoint requires the Advanced or Enterprise tier | Upgrade plan |
+| 403 | endpoint_not_allowed | Path not in your account's allowed endpoints | Contact sales |
+| 403 | partner_not_active / subscription_canceled | Account pending, suspended, or subscription canceled | Contact info@hormonaly.ai |
+| 404 | not_found / job_not_found | Compound, protocol, or job ID does not exist | Verify identifier |
+| 409 | idempotency_key_in_flight | A request with this key is still running | Retry after `Retry-After` with the same body |
+| 413 | payload_too_large | Body over 5 MB | Send a smaller body |
+| 415 | unsupported_media_type | Body is not `application/json` | Set `Content-Type: application/json` |
+| 422 | idempotency_key_reuse_mismatch | Key already used with a different body | Use a fresh key, or resend the original body |
+| 429 | rate_limit_exceeded | Per-minute request rate exceeded | Honor the `Retry-After` header |
+| 429 | monthly_budget_exceeded | Monthly token cap reached | Wait for the 1st or contact billing |
+| 500 | internal_error | Unexpected server error | Retry with exponential backoff (max 3 attempts) |
+| 503 | service_overloaded / service_unavailable | AI service busy or unavailable | Retry with exponential backoff |
+| 504 | gateway_timeout / timeout | The answer did not finish in time | Retry, or use streaming or `POST /helix/jobs` |
+
+The OpenAPI spec lists the codes each endpoint can return.
 
 ## Subscription Tiers
+
+Three tiers: **API Starter**, **API Advanced** and **API Enterprise** (tier keys `starter`, `professional` and `enterprise`; `professional` is sold as API Advanced). Only dossier and compare are tier-gated; tiers otherwise govern volume.
 
 | | API Starter | API Advanced | API Enterprise |
 |---|---|---|---|
@@ -852,7 +761,7 @@ Every `POST /api/v1/helix/query` response includes a top-level `usage` object re
 | Tokens included / month | 5,000,000 | 25,000,000 | 75,000,000 |
 | Overage rate | $100 / 1M tokens | $80 / 1M tokens | $25 / 1M tokens |
 | Hard cap | 10M tokens — then 429 | 75M tokens — then 429 | None (overage billed) |
-| Rate limit | 60 req/min | 150 req/min | Custom |
+| Rate limit | Per partner, default 60 req/min | Per partner, default 60 req/min | Per partner, default 60 req/min |
 
 | Feature | API Starter | API Advanced | API Enterprise |
 |---|---|---|---|
@@ -870,20 +779,50 @@ Mounted at `/api/v1/scribe`. Available on all plans.
 
 ### POST /scribe/generate
 
+```bash
+curl -X POST https://api.hormonaly.ai/api/v1/scribe/generate \
+  -H "Authorization: Bearer hk_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "protocols": [
+      { "name": "Testosterone Cypionate", "dose": "200 mg", "frequency": "weekly", "route": "IM" },
+      { "name": "Anastrozole", "dose": "0.5 mg", "frequency": "twice weekly", "route": "oral" }
+    ],
+    "clinical_context": "42M presenting for TRT follow-up. Reports improved energy and libido.",
+    "note_format": "soap",
+    "language": "en",
+    "lab_values": [
+      { "name": "Total Testosterone", "value": "850", "unit": "ng/dL" },
+      { "name": "Estradiol", "value": "32", "unit": "pg/mL" }
+    ]
+  }'
+```
+
+- `protocols` (required, 1–12 items, each with `name` and optional `compound`, `dose`, `frequency`, `route`, `duration`).
+- `clinical_context` (up to 10,000 characters), `lab_values`, `previous_note_context`.
+- `note_format`: `soap | dap | narrative` (default `soap`); `language`: `en | ar` (default `en`).
+- `stream: true` (or `Accept: text/event-stream`) returns SSE: `stage` events, one `content` event with the full note, then `done`.
+
+Response (abridged):
+
 ```json
 {
-  "note_format": "soap",
-  "patient_context": {
-    "age": 45, "sex": "male",
-    "diagnoses": ["hypogonadism"],
-    "active_protocols": ["testosterone-cypionate"],
-    "lab_values": { "total_testosterone": "250 ng/dL", "LH": "1.2 mIU/mL" }
+  "success": true,
+  "data": {
+    "format": "soap",
+    "content": "SUBJECTIVE:\nPatient is a 42-year-old male presenting for TRT follow-up...",
+    "sections": { "subjective": "...", "objective": "...", "assessment": "...", "plan": "..." },
+    "protocols_summary": "Testosterone Cypionate 200 mg IM weekly, Anastrozole 0.5 mg PO twice weekly",
+    "monitoring_plan": "Repeat labs in 8 weeks: Total T, Free T, Estradiol, CBC, PSA",
+    "disclaimers": ["AI-generated note -- must be reviewed by a licensed provider."],
+    "confidence_score": 0.88,
+    "interaction_alerts": []
   },
-  "visit_notes": "Patient presents for quarterly follow-up."
+  "meta": { "latency_ms": 4200, "protocol_count": 2, "language": "en", "note_format": "soap" }
 }
 ```
 
-Supported `note_format`: `soap | dap | narrative` (default: `soap`). Response includes `note`, `interaction_alerts`, `monitoring_plan`, `confidence_score`, `evidence_grade`. Latency: 15–45 seconds.
+Supports `Idempotency-Key` (a replay carries `Idempotency-Replay: true`). Recommended client timeout: 100 seconds.
 
 ### GET /scribe/health
 
@@ -896,7 +835,7 @@ No authentication required.
 | Control | Implementation |
 |---|---|
 | API key storage | SHA-256 hash only — plaintext never stored |
-| Rate limiting | Atomic SQL counter (sliding 60s window, cross-instance safe) |
+| Rate limiting | Per partner, atomic SQL counter (fixed 60s window, cross-instance safe) |
 | Budget enforcement | Pre-call check; 429 before any LLM tokens consumed |
 | Session fixation | regenerate() on every login |
 | IDOR protection | All dossiers and engagement records are ownership-checked |
@@ -941,7 +880,7 @@ Internal benchmarks (May 2026):
 
 - **Target SLA** — 99.9% monthly uptime for all production API endpoints.
 - **P1 incidents** — Acknowledged within 15 minutes, resolved within 4 hours.
-- **Status** — status.hormonaly.ai
+- **Status** — `GET https://api.hormonaly.ai/api/v1/helix/status` (authenticated) and `GET /api/v1/helix/health`
 - **Maintenance** — Announced ≥ 72 hours in advance.
 
 ## Getting Access
@@ -954,7 +893,7 @@ Contact the Hormonaly team to request a Partner API account:
 - **Enterprise / BD:** hormonaly.ai/about
 - **Plans:** hormonaly.ai/pricing
 
-You will receive your API key and a cURL quickstart example by email, plus a separate Partner Portal invitation to set up your dashboard at `/partner/dashboard`.
+Once your account is approved you receive a Partner Portal invitation. Generate your API key in the Partner Portal (API & Usage → API Keys, `/partner/api`); it is shown once.
 
 ### 2. Request Hormonaly-1 LLM Licensing
 
@@ -968,16 +907,18 @@ See the [Hormonaly-1 LLM](#hormonaly-1-llm) section for full model details and l
 ### 3. First API Call
 
 ```bash
-curl -X POST https://hormonaly.ai/api/v1/helix/query \
-  -H "Authorization: Bearer YOUR_API_KEY" \
+curl -X POST https://api.hormonaly.ai/api/v1/helix/query \
+  -H "Authorization: Bearer hk_live_..." \
   -H "Content-Type: application/json" \
-  -d '{"query": "What is the evidence for semaglutide in metabolic optimization?", "stream": false}'
+  -d '{"question": "What is the evidence for semaglutide in metabolic optimization?"}'
 ```
+
+Buffered clinical answers take about 20–35 seconds; set a client timeout of at least 100 seconds, or stream with `-H "Accept: text/event-stream"`.
 
 ### 4. OpenAPI Spec
 
 ```bash
-curl https://hormonaly.ai/api/v1/helix/openapi.json
+curl https://api.hormonaly.ai/openapi.json
 ```
 
 ### 5. Full Documentation
@@ -990,7 +931,6 @@ curl https://hormonaly.ai/api/v1/helix/openapi.json
 | Integration Guide | hormonaly.ai/integration-guide |
 | Platform | hormonaly.ai |
 | About / Leadership | hormonaly.ai/about |
-| Status | status.hormonaly.ai |
 
 ## Three-Lens Scoring
 
@@ -1049,10 +989,10 @@ Each lens returns a DomainScore object:
 Three-Lens is returned in `helix_query` when `include_three_lens: true`, and always in `helix_deep_analysis` and `run_clinical_workflow`:
 
 ```bash
-curl -X POST https://hormonaly.ai/api/v1/helix/query \
-  -H "Authorization: Bearer YOUR_API_KEY" \
+curl -X POST https://api.hormonaly.ai/api/v1/helix/query \
+  -H "Authorization: Bearer hk_live_..." \
   -H "Content-Type: application/json" \
-  -d '{"query": "What is the evidence for rapamycin in longevity?", "include_three_lens": true}'
+  -d '{"question": "What is the evidence for rapamycin in longevity?", "include_three_lens": true}'
 ```
 
 ## Webhook Events
